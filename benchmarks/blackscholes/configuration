@@ -1,4 +1,5 @@
 --program src/blackscholes.s
+--sanity no
 --single-fitness
 --pos-tests 1
 --neg-tests 0
