@@ -21,7 +21,7 @@ def mymax( a, b ):
         return a
     return max( a, b )
 
-variant_pat = re.compile( r"^\t(\d+(\.\d+)?) \t(.*)" )
+variant_pat = re.compile( r"^\t(\d+(\.\d+)?)\s+(.*)" )
 generation_pat = re.compile( r"generation (\d+) begins" )
 
 original = None
@@ -31,6 +31,8 @@ gen = 0
 generation = list()
 with open( args[ 0 ] ) as fh:
     for line in fh:
+        while len( generation ) <= gen:
+            generation.append( list() )
         m = variant_pat.search( line )
         if m is not None:
             fitness = float( m.group( 1 ) )
@@ -43,14 +45,13 @@ with open( args[ 0 ] ) as fh:
         m = generation_pat.search( line )
         if m is not None:
             gen = int( m.group( 1 ) )
-            while len( generation ) < gen:
-                generation.append( list() )
             continue
 
 if options.csv is None:
     if original is not None:
         print "original:", original
     print "best:    ", best
+    print len( generation[ -1 ] )
 else:
     with open( options.csv, 'w' ) as fh:
         writer = csv.writer( fh )
