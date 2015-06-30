@@ -1,0 +1,5 @@
+TODO:
+Download PARSEC inputs and place them in an 'inputs' directory within the benchmarks individual directory
+create an outputs directory in the benchmarks individual directory
+place a good run 'golden' for the benchmark in the output directory with the naming swapping in with out
+
