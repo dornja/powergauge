@@ -1,0 +1,329 @@
+#!/bin/bash
+#
+# Usage: do not use
+# utilities shared by all shell scripts
+# 
+
+## Help functions
+contains(){
+    local it="$1"; local item="$2";
+    echo "$it"|grep "$item" >/dev/null 2>/dev/null
+}
+
+SCRIPT="$0"
+help(){
+    local HELP_TEXT=$(cat "$SCRIPT" \
+        |sed '/^[^#]/q' \
+        |head -n -1 \
+        |tail -n +3 \
+        |sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' \
+        |cut -c3-)
+    echo "$HELP_TEXT"
+    exit 1
+}
+if $(contains "$1" "^\-\?\-h\(elp\|$\)");then help; fi
+
+BASE=$(cd "$(dirname "$SCRIPT")/.."; pwd)
+
+if ! (set -u; : $LIMIT)2>/dev/null;then
+    LIMIT="${BASE}/bin/limit"
+fi
+
+declare -a BENCHMARKS
+BENCHMARKS+=(blackscholes)
+BENCHMARKS+=(bodytrack)
+BENCHMARKS+=(facesim)
+BENCHMARKS+=(ferret)
+BENCHMARKS+=(fluidanimate)
+BENCHMARKS+=(freqmine)
+# Raytrace was removed because it does not generate testable output
+# BENCHMARKS+=(raytrace)
+BENCHMARKS+=(swaptions)
+BENCHMARKS+=(vips)
+BENCHMARKS+=(x264)
+
+declare -a SIZES
+SIZES+=(test)
+SIZES+=(tiny)
+SIZES+=(small)
+SIZES+=(medium)
+SIZES+=(large)
+SIZES+=(huge)
+
+## HOSTOSTYPE taken from parsecmgmt
+#
+# Determine OS name to use for automatically determined PARSECPLAT
+case "${OSTYPE}" in
+    *linux*)   ostype="linux";;
+    *solaris*) ostype="solaris";;
+    *bsd*)     ostype="bsd";;
+    *aix*)     ostype="aix";;
+    *hpux*)    ostype="hpux";;
+    *irix*)    ostype="irix";;
+    *amigaos*) ostype="amigaos";;
+    *beos*)    ostype="beos";;
+    *bsdi*)    ostype="bsdi";;
+    *cygwin*)  ostype="windows";;
+    *darwin*)  ostype="darwin";;
+    *interix*) ostype="interix";;
+    *os2*)     ostype="os2";;
+    *osf*)     ostype="osf";;
+    *sunos*)   ostype="sunos";;
+    *sysv*)    ostype="sysv";;
+    *sco*)     ostype="sco";;
+    *)         ostype="${OSTYPE}";;
+esac
+# Determine HOST name to use for automatically determined PARSECPLAT
+case "${HOSTTYPE}" in
+    *i386*)    hosttype="i386";;
+    *x86_64*)  hosttype="amd64";;
+    *amd64*)   hosttype="amd64";;
+    *i486*)    hosttype="amd64";;
+    *sparc*)   hosttype="sparc";;
+    *sun*)     hosttype="sparc";;
+    *ia64*)    hosttype="ia64";;
+    *itanium*) hosttype="ia64";;
+    *powerpc*) hosttype="powerpc";;
+    *ppc*)     hosttype="powerpc";;
+    *alpha*)   hosttype="alpha";;
+    *mips*)    hosttype="mips";;
+    *arm*)     hosttype="arm";;
+    *)         hosttype="${HOSTTYPE}";;
+esac
+HOSTOSTYPE="${hosttype}-${ostype}"
+
+rand_remote(){ echo ${REMOTES[$RANDOM % ${#REMOTES[@]}]}; }
+
+my_remote(){ echo ${REMOTES[$(expr $$ % ${#REMOTES[@]})]}; }
+
+## Utility functions
+transpose(){
+    # transpose a file,
+    # from http://www.commandlinefu.com/commands/view/1427/transpose-a-file
+    awk '{ for (f=1; f<=NF; f++) a[NR, f] = $f }
+         NF > nf { nf = NF }
+         END { for (f=1; f<= nf; f++)
+                 for (r=1; r<=NR; r++)
+                     printf a[r,f] (r==NR ? RS : FS); }'; }
+
+## Math Functions
+mean(){ awk '{sum += $1;} END {print sum/NR}'; }
+min(){ awk '{if((min == "") || ($1 < min)){ min = $1}} END {print min}'; }
+max(){ awk '{if((max == "") || ($1 > max)){ max = $1}} END {print max}'; }
+
+# OS Identification: from http://unix.stackexchange.com/questions/6345
+if [ -f /etc/lsb-release ]; then
+    . /etc/lsb-release
+    OS=$DISTRIB_ID
+elif [ -f /etc/debian_version ]; then
+    OS=Debian
+elif [ -f /etc/arch-release ]; then
+    OS=Arch
+else
+    OS=$(uname -s)
+fi
+
+# Architecture Identification
+if grep -q Intel /proc/cpuinfo; then
+    ARCH=intel
+elif grep -q AMD /proc/cpuinfo; then
+    ARCH=amd
+fi
+
+size_for_benchmark(){
+    case $ARCH in
+        amd)
+            case $BENCHMARK in
+                blackscholes) echo large;;
+                bodytrack)    echo medium;;
+                ferret)       echo medium;;
+                fluidanimate) echo medium;;
+                freqmine)     echo small;;
+                swaptions)    echo medium;;
+                vips)         echo medium;;
+                x264)         echo small;;
+                # SHOOTOUT benchmarks
+                binarytrees|chameneosredux|fannkuchredux|fasta|mandelbrot|meteor|nbody|pidigits) echo medium;;
+                *) warning "medium for unknown benchmark"; echo medium;;
+            esac;;
+        intel)
+            case $BENCHMARK in
+                blackscholes) echo large;;
+                bodytrack)    echo large;;
+                ferret)       echo large;;
+                fluidanimate) echo large;;
+                freqmine)     echo small;;
+                swaptions)    echo medium;;
+                vips)         echo medium;;
+                x264)         echo medium;;
+                # SHOOTOUT benchmarks
+                binarytrees|chameneosredux|fannkuchredux|fasta|mandelbrot|meteor|nbody|pidigits) echo medium;;
+                *) warning "medium for unknown benchmark"; echo medium;;
+            esac;;
+    esac; }
+
+cmd_for_benchmark(){
+    declare -A cmdlines
+    case $1 in
+        chameneosredux)
+            cmdlines[test]=60
+            cmdlines[tiny]=6000
+            cmdlines[small]=60000
+            cmdlines[medium]=1400000
+            cmdlines[large]=6000000
+            cmdlines[huge]=600000000
+            ;;
+        binarytrees)
+            cmdlines[test]=2
+            cmdlines[tiny]=6
+            cmdlines[small]=12
+            cmdlines[medium]=16
+            cmdlines[large]=20
+            cmdlines[huge]=128
+            ;;
+        fannkuchredux)
+            cmdlines[test]=2
+            cmdlines[tiny]=4
+            cmdlines[small]=8
+            cmdlines[medium]=10
+            cmdlines[large]=12
+            cmdlines[huge]=36
+            ;;
+        fasta)
+            cmdlines[test]=250
+            cmdlines[tiny]=25000
+            cmdlines[small]=250000
+            cmdlines[medium]=3750000
+            cmdlines[large]=25000000
+            cmdlines[huge]=500000000
+            ;;
+        mandelbrot)
+            cmdlines[test]=4
+            cmdlines[tiny]=100
+            cmdlines[small]=4000
+            cmdlines[medium]=5000
+            cmdlines[large]=16000
+            cmdlines[huge]=640000
+            ;;
+        meteor)
+            cmdlines[test]=2098
+            cmdlines[tiny]=2098
+            cmdlines[small]=2098
+            cmdlines[medium]=2098
+            cmdlines[large]=2098
+            cmdlines[huge]=2098
+            ;;
+        nbody)
+            cmdlines[test]=10000
+            cmdlines[tiny]=100000
+            cmdlines[small]=500000
+            cmdlines[medium]=5000000
+            cmdlines[large]=50000000
+            cmdlines[huge]=1000000000
+            ;;
+        pidigits)
+            cmdlines[test]=20
+            cmdlines[tiny]=2000
+            cmdlines[small]=6000
+            cmdlines[medium]=10000
+            cmdlines[large]=100000
+            cmdlines[huge]=10000000
+            ;;
+    esac
+    echo ${cmdlines[$SIZE]}; }
+
+# OS-specific qemu command
+case $OS in
+    Debian|Ubuntu)
+        if which kvm >/dev/null 2>/dev/null;then
+            QEMU_CMD="kvm"
+        else
+            QEMU_CMD="qemu"
+        fi
+        QEMU_FLAGS="-daemonize -nographic";;
+    Arch)
+        QEMU_CMD="qemu-system-i386"
+        QEMU_FLAGS="-daemonize -serial null -parallel null -display none -vga none";;
+    *)  QEMU_CMD="qemu"
+        QEMU_FLAGS="-daemonize -nographic";;
+esac
+
+DEFAULT_DISK="tune.qcow"
+
+## VM Functions
+SSH_ID=$BASE/../etc/data/id_rsa
+
+vm_ssh(){
+    local PORT=$1; shift
+    ssh -q -o 'StrictHostKeyChecking no' -i $SSH_ID -p $PORT $@;
+}
+
+vm_scp(){
+    local PORT=$1; shift
+    scp -q -o 'StrictHostKeyChecking no' -i $SSH_ID -P $PORT $@;
+}
+
+wait_for_start(){
+    local NAME=$1; shift
+    echo "waiting for the machine to finish booting..."
+    echo -n "CPU usage:"
+    TOTAL=0
+    while [ $TOTAL -lt 2 ] ;do
+        CPU=$(top -b -n 1|grep "\-hda $NAME"|awk '{print $6}'|sed 's/\..*$//')
+        if [ -z "$CPU" ] || [ $CPU -lt 5 ];then TOTAL=$(echo "$TOTAL+1"|bc);
+        else TOTAL=0; fi
+        echo -n " $CPU"
+        sleep 0.5
+    done
+    echo " $CPU"
+}
+
+wait_for_ssh(){
+    local PORT=$1; shift
+    echo "waiting for the machine to respond to ssh..."
+    for ((;;));do
+        echo -n "pinging ";
+        vm_ssh $PORT root@localhost echo hello 2>/dev/null|grep "hello" && break;
+        sleep 5;
+    done
+}
+
+# --------------------------------------------------------------------
+# From here to break adopted from the makepkg utility in Arch Linux
+# Copyright (c) 2006-2012 Pacman Development Team <pacman-dev@archlinux.org>
+# (see https://wiki.archlinux.org/index.php/Makepkg)
+if [[ -t 2 ]]; then
+    # prefer terminal safe colored and bold text when tput is supported
+    if tput setaf 0 &>/dev/null; then
+        ALL_OFF="$(tput sgr0)"
+        BOLD="$(tput bold)"
+        BLUE="${BOLD}$(tput setaf 4)"
+        GREEN="${BOLD}$(tput setaf 2)"
+        RED="${BOLD}$(tput setaf 1)"
+        YELLOW="${BOLD}$(tput setaf 3)"
+    else
+        ALL_OFF="\e[1;0m"
+        BOLD="\e[1;1m"
+        BLUE="${BOLD}\e[1;34m"
+        GREEN="${BOLD}\e[1;32m"
+        RED="${BOLD}\e[1;31m"
+        YELLOW="${BOLD}\e[1;33m"
+    fi
+fi
+readonly ALL_OFF BOLD BLUE GREEN RED YELLOW
+
+msg() {
+    local mesg=$1; shift
+    printf "${GREEN}==>${ALL_OFF}${BOLD} ${mesg}${ALL_OFF}\n" "$@"
+}
+
+warning() {
+	local mesg=$1; shift
+	printf "${YELLOW}==> $(gettext "WARNING:")${ALL_OFF}${BOLD} ${mesg}${ALL_OFF}\n" "$@" >&2
+}
+
+error() {
+	local mesg=$1; shift
+	printf "${RED}==> $(gettext "ERROR:")${ALL_OFF}${BOLD} ${mesg}${ALL_OFF}\n" "$@" >&2
+        exit 1
+}

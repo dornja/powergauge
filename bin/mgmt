@@ -1,0 +1,1021 @@
+#!/bin/bash
+#
+# Usage: mgmt ACTION BENCHMARK [OPTIONS...]
+#  manage benchmark programs
+#
+# Actions:
+#  clean ----------- remove the specified benchmark
+#  unpack ---------- download or copy the benchmark source
+#  compile --------- compile the benchmark to assembly
+#  link ------------ link the assembly benchmark to an executable
+#  input ----------- generate test input for benchmark
+#  output ---------- generate correct test output for benchmark
+#  orig ------------ generate the original parsec executable
+#
+# Options:
+#  -f,--flags ------ preset flags, `all' or `min' (default `all')
+#  -F,--Flags FLAGS -- use literal string FLAGS for compilation
+#  -s,--size SIZE -- run test,tiny,small,medium,large(default)
+#  -l,--llvm ------- compile to and link from LLVM IR (not ASM)
+#
+. $(dirname $0)/common
+
+if [ -z "$SPEC_ROOT" ] ; then
+    SPEC_ROOT="$BASE"/benchmarks/SPEC_CPU2006v1.0
+fi
+
+## We need a version of gcc which still supports the -combine flag
+## (modern versions have dropped support for this flag).
+if [ -z "$GCC_COMBINE" ];then
+    GCC_COMBINE="gcc-4.4"
+fi
+
+## Parse Options
+if [ $# -lt 2 ];then help; fi
+ACTION="$1"
+BENCHMARK="$2"
+FLAGS="all"
+FULL_FLAGS=""
+SIZE=$(size_for_benchmark $BENCHMARK)
+LLVM=""
+eval set -- $(getopt -o f:F:s:l -l flags:,Flags:,size:,llvm -- "$@" || help;)
+while [ $# -gt 0 ];do
+    case $1 in
+        -f|--flags) FLAGS="$2"; shift;;
+        -F|--Flags) FULL_FLAGS="$2"; shift;;
+        -s|--size) SIZE="$2"; shift;;
+        -l|--llvm) error "the 'llvm' option is not implemented.";;
+        (--) shift; break;;
+        (-*) error "unrecognized option $1";;
+        (*)  break;;
+    esac
+    shift
+done
+
+## Benchmark applications
+declare -a PARSEC_APPS
+PARSEC_APPS+=(blackscholes)
+PARSEC_APPS+=(bodytrack)
+PARSEC_APPS+=(facesim)
+PARSEC_APPS+=(ferret)
+PARSEC_APPS+=(fluidanimate)
+PARSEC_APPS+=(freqmine)
+PARSEC_APPS+=(raytrace)
+PARSEC_APPS+=(swaptions)
+PARSEC_APPS+=(vips)
+PARSEC_APPS+=(x264)
+
+declare -a SHOOTOUT_APPS
+SHOOTOUT_APPS+=(binarytrees)
+SHOOTOUT_APPS+=(binarytreesredux)
+SHOOTOUT_APPS+=(chameneosredux)
+SHOOTOUT_APPS+=(fannkuchredux)
+SHOOTOUT_APPS+=(fasta)
+SHOOTOUT_APPS+=(fastaredux)
+SHOOTOUT_APPS+=(knucleotide)
+SHOOTOUT_APPS+=(mandelbrot)
+SHOOTOUT_APPS+=(meteor)
+SHOOTOUT_APPS+=(nbody)
+SHOOTOUT_APPS+=(pidigits)
+SHOOTOUT_APPS+=(regexdna)
+SHOOTOUT_APPS+=(revcomp)
+SHOOTOUT_APPS+=(spectralnorm)
+SHOOTOUT_APPS+=(threadring)
+
+declare -a SPEC_APPS
+SPEC_APPS+=(400.perlbench)
+SPEC_APPS+=(401.bzip2)
+SPEC_APPS+=(403.gcc)
+SPEC_APPS+=(410.bwaves)
+SPEC_APPS+=(416.gamess)
+SPEC_APPS+=(429.mcf)
+SPEC_APPS+=(433.milc)
+SPEC_APPS+=(434.zeusmp)
+SPEC_APPS+=(435.gromacs)
+SPEC_APPS+=(436.cactusADM)
+SPEC_APPS+=(437.leslie3d)
+SPEC_APPS+=(444.namd)
+SPEC_APPS+=(445.gobmk)
+SPEC_APPS+=(447.dealII)
+SPEC_APPS+=(450.soplex)
+SPEC_APPS+=(453.povray)
+SPEC_APPS+=(454.calculix)
+SPEC_APPS+=(456.hmmer)
+SPEC_APPS+=(458.sjeng)
+SPEC_APPS+=(459.GemsFDTD)
+SPEC_APPS+=(462.libquantum)
+SPEC_APPS+=(464.h264ref)
+SPEC_APPS+=(465.tonto)
+SPEC_APPS+=(470.lbm)
+SPEC_APPS+=(471.omnetpp)
+SPEC_APPS+=(473.astar)
+SPEC_APPS+=(481.wrf)
+SPEC_APPS+=(482.sphinx3)
+SPEC_APPS+=(483.xalancbmk)
+SPEC_APPS+=(998.specrand)
+SPEC_APPS+=(999.specrand)
+
+## Compilation Flags
+PARSEC_BASE_FLAGS_ALL="-O3 -g -funroll-loops -fprefetch-loop-arrays "
+PARSEC_BASE_FLAGS_ALL+="-fpermissive -fno-exceptions -static-libgcc "
+PARSEC_BASE_FLAGS_ALL+="-Wl,--hash-style=both,--as-needed "
+
+## Functions
+orig(){
+    local bench=$1;
+    local bench_dir="$BASE/benchmarks/$bench";
+    if [ -f "$bench_dir/$bench.orig" ];then
+        msg "$bench_dir/$bench.orig exists"
+<<<<<<< HEAD
+    elif [ $bench == x264 ];then
+=======
+    elif [ $bench == x264 ] || echo "${SHOOTOUT_APPS[@]}"|grep -q $bench;then
+>>>>>>> 151ebc073c0deedbf904b66e11007304a210d777
+        compile $bench \
+            && link $bench \
+            && cp "$bench_dir/$bench" "$bench_dir/$bench.orig"
+    else
+        # build with parsecmgmt
+        env PATH="$BASE"/benchmarks/parsec-3.0/bin:"$PATH" \
+            parsecmgmt -a build -p $bench \
+            || error "parsecmgmt could not build $bench"
+        exe="$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/inst/$HOSTOSTYPE.gcc/bin/$bench
+        if [ -f "$exe" ];then
+            cp "$exe" "$bench_dir/$bench.orig"
+        else
+            error "can't find $exe"
+        fi
+        msg "$bench/$bench.orig created"
+    fi; }
+
+unpack(){ # dispatch depending on benchmark suite
+    local bench=$1;
+    local bench_dir="$BASE/benchmarks/$bench";
+    if [ -d "$bench_dir" ];then
+        msg "$bench/ exists"
+    else
+        if echo "${PARSEC_APPS[@]}"|grep -q $bench;then
+            case $bench in
+                bodytrack|facesim|ferret|raytrace|vips)
+                    # pre-build prep
+                    case $bench in
+                        ferret)
+                            pushd "$BASE"/benchmarks/parsec-3.0/pkgs/libs/gsl/src
+                            sed -i 's/\(SUBDIRS =.*\) doc/\1/' Makefile.{in,am}
+                            popd
+                            ;;
+                        raytrace)
+                            sed -i '22s/^$/#include <unistd.h>/' \
+                                "$BASE"/benchmarks/parsec-3.0/pkgs/apps/raytrace/src/RTTL/common/MapOptions.hxx
+                            ;;
+                        vips)
+                            cp "$BASE/etc/vips-configure" \
+                               "$BASE/benchmarks/parsec-3.0/pkgs/apps/vips/src/configure"
+                            ;;
+                    esac
+                    # build with parsecmgmt
+                    env PATH="$BASE"/benchmarks/parsec-3.0/bin:"$PATH" \
+                        parsecmgmt -a build -p $bench \
+                    || error "parsecmgmt could not build $bench"
+                    case $bench in
+                        ferret|raytrace)
+                            mkdir -p "$bench_dir"
+                            cp -R "$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/src/* "$bench_dir" ;;
+                    esac
+                    ;;
+                *)
+                    # It won't hurt to call "mkdir -p" again later
+                    mkdir -p "$bench_dir"
+                    cp -R "$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/src/* "$bench_dir" ;;
+            esac
+            mkdir -p "$bench_dir"
+        elif echo "${SHOOTOUT_APPS[@]}"|grep -q $bench;then
+            mkdir "$bench_dir"
+            cp "$BASE"/benchmarks/benchmarksgame/bench/$BENCHMARK/*gcc* \
+                "$bench_dir"
+        elif echo "${SPEC_APPS[@]}"|grep -q $bench;then
+            SPEC_BENCH=$(echo "${SPEC_APPS[@]}"|tr ' ' '\n'|grep $bench)
+            mkdir -p "$bench_dir"
+            cp -R $SPEC_ROOT/benchspec/CPU2006/$SPEC_BENCH/src/* "$bench_dir"
+            chmod -R u+w "$bench_dir"
+        else
+            error "benchmark '$1' is not known"
+        fi
+        # clean out any old executables or source
+        rm -f "$bench_dir/$bench" "$bench_dir/$bench.s" \
+            "$bench_dir/$bench.input" "$bench_dir/$bench.output"
+        msg "$bench/ created"
+    fi; }
+
+not_implemented(){
+    error "$1 compilation not yet implemented"; }
+
+set_flags(){
+    local min="$1";
+    if [ -z "$2" ];then
+        local all="$PARSEC_BASE_FLAGS_ALL $1"
+    else
+        local all="$2";
+    fi
+    if [ -z "$FULL_FLAGS" ];then
+        case $FLAGS in
+            all) FULL_FLAGS="$all";;
+            min) FULL_FLAGS="$min";;
+        esac
+    fi; }
+
+compile(){
+    local bench=$1;
+    local bench_dir="$BASE/benchmarks/$bench";
+
+    if [ -f "$bench_dir/$bench.s" ];then
+        msg "$bench/$bench.s exists"
+    else
+        pushd "$bench_dir">/dev/null
+        case $bench in
+
+            ## PARSEC
+            blackscholes)
+                set_flags "-DNCO=4"
+                m4 ./c.m4.pthreads blackscholes.c > blackscholes.m4.cpp
+                g++ $FULL_FLAGS blackscholes.m4.cpp -S -o blackscholes.s \
+                    || error "compilation failed"
+                ;;
+            bodytrack)
+                set_flags "-fpermissive -fexceptions"
+                tmp=$(mktemp)
+                pushd "$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/src/TrackingBenchmark >/dev/null
+                # we rename this file so that it won't be included in
+                # the concatenated src.
+                mv TrackingModelTBB.cpp TrackingModelTBB.bkup
+                rm -f bodytrack.cpp
+                cat *.c* > bodytrack.cpp
+                cat ../FlexImageLib/*.c* >> bodytrack.cpp # this makes libflex part of the asm
+                mv TrackingModelTBB.bkup TrackingModelTBB.cpp
+
+                # now we undef USE_TBB to controll the includes and
+                # comment out duplicate template defs.
+                sed -i '1i#undef USE_TBB' bodytrack.cpp
+                sed -i '1459i/*' bodytrack.cpp
+                sed -i '1466a*/' bodytrack.cpp
+                sed -i '1771i/*' bodytrack.cpp
+                sed -i '1778a*/' bodytrack.cpp
+
+                g++ -DHAVE_CONFIG_H -I. -I.. -I../FlexImageLib \
+                    $FULL_FLAGS -MT FlexImage.lo -MD -MP -MF \
+                    ../../obj/amd64-linux.gcc/FlexImageLib/.deps/FlexImage.Plo \
+                    -I ../../obj/amd64-linux.gcc/ \
+                    -I ../../../../libs/tbblib/src/include/ \
+                    -S bodytrack.cpp -o $tmp \
+                    || error "compilation failed: build ${bench} with parsecmgt"
+                popd >/dev/null
+                mv $tmp ${bench}.s
+                ;;
+            facesim)
+                set_flags "-DENABLE_PTHREADS -DUSE_ALAMERE_TASKQ -DNDEBUG"
+                tmp=$(mktemp)
+                tmp2=$(mktemp)
+                FACE_SOURCE=""
+                FACE_SOURCE+="FACE_DRIVER.cpp "
+                FACE_SOURCE+="FACE_LANDMARK_OPTIMIZATION_GOAL.cpp "
+                FACE_SOURCE+="FACE_OPTIMIZATION.cpp "
+                FACE_SOURCE+="LANDMARK_PROXIMITY_OPTIMIZATION.cpp "
+                FACE_SOURCE+="main.cpp"
+                pushd "$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/src/Benchmarks/facesim >/dev/null
+                cat $FACE_SOURCE > ../../Public_Library/all.cpp
+                cd ../../Public_Library
+
+                files=""
+                files+="Arrays/ARRAY.h "
+                files+="Arrays/ARRAY_PARALLEL_OPERATIONS.h "
+                files+="Arrays/LIST_ARRAY.h "
+                files+="Arrays/LIST_ARRAYS.h "
+                files+="Collisions_And_Interactions/COLLISION_BODY_LIST_3D.cpp "
+                files+="Collisions_And_Interactions/COLLISION_PENALTY_FORCES.h "
+                files+="Collisions_And_Interactions/TETRAHEDRON_COLLISION_BODY.cpp "
+                files+="Constitutive_Models/CONSTITUTIVE_MODEL_3D.h "
+                files+="Constitutive_Models/DIAGONALIZED_FACE_3D.h "
+                files+="Constitutive_Models/DIAGONALIZED_ISOTROPIC_STRESS_DERIVATIVE_3D.h "
+                files+="Constitutive_Models/STRAIN_MEASURE_3D.cpp "
+                files+="Deformable_Objects/DEFORMABLE_OBJECT_3D.cpp "
+                files+="Forces_And_Torques/BODY_FORCES_3D.cpp "
+                files+="Forces_And_Torques/DIAGONALIZED_FINITE_VOLUME_3D.cpp "
+                files+="Forces_And_Torques/SOLIDS_FORCES.h "
+                files+="Grids/SEGMENT_MESH.cpp "
+                files+="Grids/TETRAHEDRON_MESH.cpp "
+                files+="Grids/TRIANGLE_MESH.cpp "
+                files+="Math_Tools/constants.h "
+                files+="Math_Tools/exchange.h "
+                files+="Math_Tools/maxabs.h "
+                files+="Math_Tools/max.h "
+                files+="Math_Tools/maxmag.h "
+                files+="Math_Tools/min.h "
+                files+="Math_Tools/minmag.h "
+                files+="Math_Tools/sqr.h "
+                files+="Matrices_And_Vectors/MATRIX_3X3.cpp "
+                files+="Matrices_And_Vectors/MATRIX_NXN.h "
+                files+="Matrices_And_Vectors/SYMMETRIC_MATRIX_3X3.cpp "
+                files+="Matrices_And_Vectors/VECTOR_2D.h "
+                files+="Matrices_And_Vectors/VECTOR_3D.h "
+                files+="Matrices_And_Vectors/VECTOR_ND.h "
+                files+="Solids_And_Fluids/SOLIDS_EVOLUTION_CALLBACKS.h "
+
+                cat $files >> all.cpp
+
+                PL="$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/src/Public_Library
+                INCLUDE=" -I $PL/../Benchmarks/facesim/ "
+                INCLUDE+="-I $PL/../TaskQ/include/ "
+                INCLUDE+="-I $PL/Arrays/ "
+                INCLUDE+="-I $PL/Collisions_And_Interactions/ "
+                INCLUDE+="-I $PL/Constitutive_Models/ "
+                INCLUDE+="-I $PL/Data_Structures/ "
+                INCLUDE+="-I $PL/Deformable_Objects/ "
+                INCLUDE+="-I $PL/Fracture/ "
+                INCLUDE+="-I $PL/Forces_And_Torques/ "
+                INCLUDE+="-I $PL/Geometry/ "
+                INCLUDE+="-I $PL/Grids/ "
+                INCLUDE+="-I $PL/Level_Sets/ "
+                INCLUDE+="-I $PL/Matrices_And_Vectors/ "
+                INCLUDE+="-I $PL/Particles/ "
+                INCLUDE+="-I $PL/Read_Write/ "
+                INCLUDE+="-I $PL/Rigid_Bodies/ "
+                INCLUDE+="-I $PL/Solids_And_Fluids/ "
+                INCLUDE+="-I $PL/Thread_Utilities/ "
+                INCLUDE+="-I $PL/Utilities/ "
+
+                g++ $FULL_FLAGS -fexceptions $INCLUDE -S all.cpp -o $tmp \
+                    ||error "compilation failed"
+
+                # Other files not compiled into facesim.s
+                others=""
+                others+="Arrays/ARRAY_PARALLEL_OPERATIONS.cpp "
+                others+="Collisions_And_Interactions/BOX_HIERARCHY.cpp "
+                others+="Collisions_And_Interactions/TETRAHEDRON_HIERARCHY.cpp "
+                others+="Data_Structures/SPLAY_TREE.cpp "
+                others+="Deformable_Objects/DEFORMABLE_OBJECT.cpp "
+                others+="Deformable_Objects/DEFORMABLE_OBJECT_COLLISIONS_3D.cpp "
+                others+="Fracture/EMBEDDED_TETRAHEDRALIZED_VOLUME_BOUNDARY_SURFACE.cpp "
+                others+="Geometry/BOX_2D.cpp "
+                others+="Geometry/BOX_3D.cpp "
+                others+="Geometry/EMBEDDED_OBJECT.cpp "
+                others+="Geometry/EMBEDDED_TETRAHEDRALIZED_VOLUME.cpp "
+                others+="Geometry/IMPLICIT_SURFACE.cpp "
+                others+="Geometry/IMPLICIT_SURFACE_LIST.cpp "
+                others+="Geometry/PLANE.cpp "
+                others+="Geometry/SEGMENT_2D.cpp "
+                others+="Geometry/SEGMENT_3D.cpp "
+                others+="Geometry/SEGMENTED_CURVE_3D.cpp "
+                others+="Geometry/TETRAHEDRALIZED_VOLUME.cpp "
+                others+="Geometry/TETRAHEDRALIZED_VOLUME_LIST.cpp "
+                others+="Geometry/TETRAHEDRON.cpp "
+                others+="Geometry/TRIANGLE_3D.cpp "
+                others+="Geometry/TRIANGULATED_OBJECT.cpp "
+                others+="Geometry/TRIANGULATED_SURFACE.cpp "
+                others+="Geometry/TRIANGULATED_SURFACE_LIST.cpp "
+                others+="Level_Sets/LEVELSET.cpp "
+                others+="Level_Sets/LEVELSET_3D.cpp "
+                others+="Matrices_And_Vectors/VECTOR_ND_PARALLEL.cpp "
+                others+="Particles/PARTICLE.cpp "
+                others+="Particles/SOLIDS_PARTICLE.cpp "
+                others+="Read_Write/FILE_UTILITIES.cpp "
+                others+="Rigid_Bodies/MASS_PROPERTIES_3D.cpp "
+                others+="Rigid_Bodies/RIGID_BODY_3D.cpp "
+                others+="Rigid_Bodies/RIGID_BODY_COLLISIONS_3D.cpp "
+                others+="Rigid_Bodies/RIGID_BODY_EVOLUTION_3D.cpp "
+                others+="Rigid_Bodies/RIGID_BODY_INTERSECTIONS_3D.cpp "
+                others+="Rigid_Bodies/RIGID_BODY_LIST_3D.cpp "
+                others+="Solids_And_Fluids/SOLIDS_EVOLUTION_3D.cpp "
+                others+="Solids_And_Fluids/SOLIDS_FLUIDS_DRIVER.cpp "
+                others+="Solids_And_Fluids/SOLIDS_FLUIDS_DRIVER_3D.cpp "
+                others+="Solids_And_Fluids/SOLIDS_FLUIDS_EXAMPLE_3D.cpp "
+                others+="Solids_And_Fluids/SOLIDS_PARAMETERS_3D.cpp "
+                others+="Thread_Utilities/THREAD_DIVISION_PARAMETERS.cpp "
+                others+="Thread_Utilities/THREAD_POOL_ALAMERE.cpp "
+                others+="Thread_Utilities/THREAD_POOL.cpp "
+                others+="Thread_Utilities/THREAD_POOL_SINGLE.cpp "
+                others+="Thread_Utilities/THREAD_ARRAY_LOCK.cpp "
+                others+="Utilities/DEBUG_UTILITIES.cpp "
+                others+="Utilities/LOG.cpp "
+                others+="Utilities/LOG_ENTRY.cpp "
+                others+="Utilities/PARSE_ARGS.cpp "
+                others+="Utilities/STRING_UTILITIES.cpp "
+                others+="Utilities/TIMER.cpp"
+                cat $others > others.cpp
+
+                g++ $FULL_FLAGS -fexceptions $INCLUDE -c others.cpp -o $tmp2 \
+                    ||error "compilation of others failed"
+
+                popd >/dev/null
+                mv $tmp ${bench}.s
+                mv $tmp2 ${bench}_others.o
+                ;;
+            ferret)
+                set_flags ""
+                sed -i '31s/^int/\/\/int/;' image/image.h
+                gcc-4.4 --combine -S \
+                    -Iinclude/ \
+                    -I"$BASE"/benchmarks/parsec-3.0/pkgs/libs/libjpeg/inst/amd64-linux.gcc/include \
+                    -I"$BASE"/benchmarks/parsec-3.0/pkgs/libs/gsl/inst/amd64-linux.gcc/include \
+                    $FULL_FLAGS \
+                    -fno-inline \
+                    src/*.c src/lsh/*.c \
+                    image/{image,extract,edge,srm}.c \
+                    benchmark/ferret-pthreads.c \
+                    -o ${bench}.s|| error "compilation failed"
+                ;;
+            fluidanimate)
+                cat pthreads.cpp >  all.cpp
+                cat cellpool.cpp >> all.cpp
+                cat parsec_barrier.cpp >> all.cpp
+                set_flags "-Wno-invalid-offsetof"
+                g++ $FULL_FLAGS -S all.cpp -o ${bench}.s||error "compilation failed"
+                ;;
+            freqmine)
+                set_flags "-fopenmp -Wno-deprecated"
+                cat {fpmax,data,fp_tree,buffer,fsout,fp_node,wtime}.cpp > all.cpp
+                # only keep the first occurrence of '#include "common.h"'
+                sed -i '60,$s/\#include "common.h"//' all.cpp
+                g++ $FULL_FLAGS -S all.cpp -o ${bench}.s||error "compilation failed"
+                ;;
+            # Ignoring raytrace, because it does not generate any
+            # testable results (just debug info).
+            raytrace)
+                (
+                    cat LRT/render.cxx
+                    find LRT/ -name "*.cxx"|grep -v test|grep -v render.cxx|xargs cat
+                    find RTTL/ -name "*.cxx"|grep -v test|xargs cat
+                    cat MiniView/Camera.hxx|sed 's/Camera/MiniCamera/'
+                    cat MiniView/rtview.cxx|sed 's/^Camera/MiniCamera/'
+                ) > all.cxx
+                CMD="$FULL_FLAGS "
+                CMD+="$(find LRT/ -type d -exec echo {} \+|sed 's/^/-I.\//;s/ / -I.\//g') "
+                CMD+="$(find RTTL/ -type d -exec echo {} \+|sed 's/^/-I.\//;s/ / -I.\//g') "
+                CMD+="$(find MiniView/ -type d -exec echo {} \+|sed 's/^/-I.\//;s/ / -I.\//g') "
+                CMD+="-I./ -I./RTTL -I./RTTL/common -I./RTTL/BVH -I./SG -I./LRT/include -I./LRT "
+                CMD+="all.cxx -S -o ${bench}.s"
+                g++ $CMD ||error "compilation failed"
+                ;;
+            swaptions)
+                set_flags "-pthread -DENABLE_THREADS"
+                cat *.c* > all.cpp
+                g++ $FULL_FLAGS -S all.cpp -o ${bench}.s||error "compilation failed"
+                ;;
+            vips)
+                if [ ! "$FLAGS" == "all" ] || [ ! -z "$FULL_FLAGS" ];then
+                    warning "$bench does not support special flags"
+                fi
+                VBASE="$BASE"/benchmarks/parsec-3.0/pkgs/apps/vips/
+                "$BASE"/bin/libvips.sh $VBASE || error "compilation failed"
+                cp "$VBASE"/src/tools/iofuncs/some_libvips.s $bench.s
+                ;;
+            x264)
+                set_flags " " "-O1"
+                X264_SOURCE="x264.c"
+                X264_SOURCE+=" matroska.c"
+                X264_SOURCE+=" muxers.c"
+                X264_SOURCE+=" common/mc.c"
+                X264_SOURCE+=" common/predict.c"
+                X264_SOURCE+=" common/pixel.c"
+                X264_SOURCE+=" common/macroblock.c"
+                X264_SOURCE+=" common/frame.c"
+                X264_SOURCE+=" common/dct.c"
+                X264_SOURCE+=" common/cpu.c"
+                X264_SOURCE+=" common/cabac.c"
+                X264_SOURCE+=" common/common.c"
+                X264_SOURCE+=" common/mdate.c"
+                X264_SOURCE+=" common/set.c"
+                X264_SOURCE+=" common/quant.c"
+                X264_SOURCE+=" common/vlc.c"
+                X264_SOURCE+=" encoder/analyse.c"
+                X264_SOURCE+=" encoder/me.c"
+                X264_SOURCE+=" encoder/ratecontrol.c"
+                X264_SOURCE+=" encoder/set.c"
+                X264_SOURCE+=" encoder/macroblock.c"
+                X264_SOURCE+=" encoder/cabac.c"
+                X264_SOURCE+=" encoder/cavlc.c"
+                X264_SOURCE+=" encoder/encoder.c"
+                ./configure --disable-asm
+                gcc-4.4 $FULL_FLAGS -fno-inline --combine -S -I. -Icommon \
+                    $X264_SOURCE -o $bench.s ||error "compilation failed"
+                ;;
+
+            ## SHOOTOUT
+            chameneosredux)
+                set_flags "-O3" "-O3"
+                gcc -x c $bench.gcc-2.gcc -S -o $bench.s || error "compilation failed";;
+            binarytrees|fannkuchredux|fasta|mandelbrot|meteor|nbody|pidigits)
+                set_flags "-O3" "-O3"
+                gcc -x c $bench.gcc -S -o $bench.s || error "compilation failed";;
+
+            ## SPEC
+            bzip2)
+                set_flags "" "-O3 -fno-inline"
+                $GCC_COMBINE -combine -S $FULL_FLAGS \
+                    blocksort.c bzip2.c compress.c \
+                    crctable.c decompress.c huffman.c randtable.c \
+                    bzlib.c -o $bench.s||error "compilation failed"
+                ;;
+            h264ref)
+                set_flags "" "-O3 -fno-inline"
+                ## cleaning
+                # delete lines 48-50 of macroblock.h
+                sed -i '48,50d' macroblock.h
+                # extern->const in line 50 of rdopt.c
+                sed -i '50s/extern/const/' rdopt.c
+                # remove second arg to getconfigfilecontent in
+                # q_matrix.c and in q_offsets.c
+                sed -i '16s/,.*$/);/;376s/, 0//' q_matrix.c
+                sed -i '16s/,.*$/);/;301s/, 0//' q_offsets.c
+                $GCC_COMBINE -combine -S $FULL_FLAGS \
+                    annexb.c biariencode.c block.c cabac.c \
+                    configfile.c context_ini.c decoder.c explicit_gop.c \
+                    fast_me.c filehandle.c fmo.c header.c image.c \
+                    intrarefresh.c leaky_bucket.c lencod.c loopFilter.c \
+                    macroblock.c mb_access.c mbuffer.c memalloc.c mv-search.c \
+                    nal.c nalu.c nalucommon.c output.c parset.c parsetcommon.c \
+                    q_matrix.c q_offsets.c ratectl.c rdopt.c \
+                    rdopt_coding_state.c rdpicdecision.c refbuf.c rtp.c sei.c \
+                    slice.c transform8x8.c vlc.c weighted_prediction.c \
+                    specrand.c -o $bench.s ||error "compilation failed"
+                ;;
+            *) not_implemented $bench ;;
+        esac
+        popd>/dev/null
+        msg "$bench/$bench.s created"
+    fi; }
+
+link(){
+    local bench=$1;
+    local bench_dir="$BASE/benchmarks/$bench";
+
+    if [ -f "$bench_dir/$bench" ];then
+        msg "$bench/$bench exists"
+    else
+        pushd "$bench_dir">/dev/null
+        case $bench in
+
+            ## PARSEC
+            blackscholes)
+                g++ -lpthread ${bench}.s -o $bench||error "linking failed"
+                ;;
+            bodytrack)
+                FLAGS="-lthreads -lpthread"
+
+                ldir="$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/obj/amd64-linux.gcc
+
+                link_dirs=""
+                link_dirs+="-L${ldir}/FlexImageLib/.libs "
+                link_dirs+="-L${ldir}/TrackingBenchmark/threads/.libs "
+
+                g++ $link_dirs ${bench}.s -o $bench $FLAGS \
+                    ||error "linking failed"
+                ;;
+            facesim)
+                FLAGS="-pthread -xW -lm"
+
+                ldir="$BASE"/benchmarks/parsec-3.0/pkgs/apps/$bench/obj/amd64-linux.gcc
+
+                link_dirs="-L/usr/lib64 -L/usr/lib "
+                link_dirs+="-L${ldir}/lib "
+                link_dirs+="${ldir}/TaskQ/lib/taskQ.o "
+                link_dirs+="$BASE/benchmarks/facesim/facesim_others.o"
+
+                g++ $link_dirs ${bench}.s -o $bench $FLAGS \
+                    ||error "linking failed"
+                ;;
+            ferret)
+                FLAGS="-lrt -lgsl -lgslcblas -ljpeg -lstdc++ -lpthread -lm"
+
+                lbase="$BASE"/benchmarks/parsec-3.0/pkgs
+
+                ldirs="-L${lbase}/libs/libjpeg/inst/amd64-linux.gcc/lib "
+                ldirs+="-L${lbase}/libs/gsl/inst/amd64-linux.gcc/lib "
+
+                gcc $ldirs ${bench}.s -o $bench $FLAGS||error "linking failed"
+                ;;
+            fluidanimate)
+                g++ ${bench}.s -lpthread -o $bench||error "linking failed"
+                ;;
+            freqmine)
+                g++ -fopenmp -Wno-deprecated ${bench}.s -o $bench||error "linking failed"
+                ;;
+            raytrace)
+                FLAGS="-lglut -lGL -lGL -lGLU -lXmu -lXext -lXau -lX11 "
+                FLAGS+="-ldl -lpthread -lstdc++ -lpthread -lrt -rdynamic "
+
+                lbase="$BASE"/benchmarks/parsec-3.0/pkgs
+
+                ldirs="-L/usr/lib64 -L/usr/lib "
+                ldirs+="-L${lbase}/libs/mesa/inst/amd64-linux.gcc/lib "
+                ldirs+="-L${lbase}/libs/mesa/inst/amd64-linux.gcc/lib "
+
+                g++ $ldirs ${bench}.s -o $bench \
+                    ${lbase}/libs/mesa/inst/amd64-linux.gcc/lib/libGLU.a \
+                    $FLAGS||error "linking failed"
+                ;;
+            swaptions)
+                FLAGS="-pthread -DENABLE_THREADS"
+                g++ $FLAGS ${bench}.s -o $bench||error "linking failed"
+                ;;
+            vips)
+                if [ ! "$FLAGS" == "all" ] || [ ! -z "$FULL_FLAGS" ];then
+                    warning "$bench does not support special flags"
+                fi
+                VBASE="$BASE"/benchmarks/parsec-3.0/pkgs/apps/vips/
+                VEXE="$VBASE"/src/tools/iofuncs/vips
+                if [ ! -f "$VEXE" ];then
+                    "$BASE"/bin/libvips.sh $VBASE||error "linking failed"
+                fi
+                cp "$VEXE" $bench
+                ;;
+            x264)
+                FLAGS="-lm -lpthread"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed"
+                ;;
+
+            ## SHOOTOUT
+            binarytrees)
+                FLAGS="-lm -fopenmp -D_FILE_OFFSET_BITS=64 -I/usr/include/apr-1.0"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed";;
+            chameneosredux)
+                FLAGS="-pthread"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed";;
+            fannkuchredux)
+                FLAGS="-pthread -falign-labels=8"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed";;
+            fasta)
+                FLAGS="-std=c99 -mfpmath=sse -msse3"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed";;
+            mandelbrot)
+                FLAGS="-mfpmath=sse -msse2 -fopenmp"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed";;
+            meteor|nbody)
+                FLAGS="-lm"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed";;
+            pidigits)
+                FLAGS="-lgmp"
+                gcc $bench.s -o $bench $FLAGS||error "linking failed";;
+
+            ## SPEC
+            bzip2)
+                gcc ${bench}.s -o $bench||error "linking failed";;
+            h264ref)
+                gcc ${bench}.s -lm -o $bench||error "linking failed";;
+            *) error "linking not implemented for $bench"
+        esac
+        popd>/dev/null
+        msg "$bench/$bench created"
+    fi; }
+
+input(){
+    local bench=$1;
+    local target=$bench.input;
+    local bench_dir="$BASE/benchmarks/$bench";
+    local parsec_dir="$BASE/benchmarks/parsec-3.0/pkgs/apps/$bench";
+    pushd "$bench_dir">/dev/null
+
+    if [ -f "$bench_dir/$target" ];then
+        msg "$bench/$target exists"
+    else
+        ## parsec sizes
+        if echo "${PARSEC_APPS[@]}"|grep -q $bench;then
+            case $SIZE in
+                test) INPUT="input_test.tar";;
+                tiny) INPUT="input_simdev.tar";;
+                small) INPUT="input_simsmall.tar";;
+                medium) INPUT="input_simmedium.tar";;
+                large) INPUT="input_simlarge.tar";;
+                huge) INPUT="input_native.tar";;
+                *) error "input SIZE '$SIZE' is not recognized";;
+            esac
+        fi
+
+        case $BENCHMARK in
+
+            ## PARSEC
+            blackscholes)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                case $SIZE  in
+                    test)   in=in_4.txt;;
+                    tiny)   in=in_16.txt;;
+                    small)  in=in_4K.txt;;
+                    medium) in=in_16K.txt;;
+                    large)  in=in_64K.txt;;
+                    huge)   in=in_10M.txt;;
+                esac
+                mv $in $target;;
+            bodytrack)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                case $SIZE  in
+                    test)   in=sequenceB_1;;
+                    tiny)   in=sequenceB_1;;
+                    small)  in=sequenceB_1;;
+                    medium) in=sequenceB_2;;
+                    large)  in=sequenceB_4;;
+                    huge)   in=sequenceB_261;;
+                esac
+
+                mv $in $target;;
+            facesim)
+                if [ ! -d ${parsec_dir}/inputs/ ];then
+                    warning "downloading facesim input data"
+                    pushd "$BASE/benchmarks/parsec-3.0/"
+                    wget http://cs.unm.edu/~eschulte/data/pkgs-apps-facesim-inputs.tar.gz
+                    tar xzf pkgs-apps-facesim-inputs.tar.gz
+                    popd
+                fi
+                tar xf ${parsec_dir}/inputs/$INPUT
+                in="Face_Data"
+                mv $in $target;;
+            ferret)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                in="corel queries"
+                rm -rf $target
+                mkdir -p $target
+                mv $in $target/;;
+            fluidanimate)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                case $SIZE  in
+                    test)   in=in_5K.fluid;;
+                    tiny)   in=in_15K.fluid;;
+                    small)  in=in_35K.fluid;;
+                    medium) in=in_100K.fluid;;
+                    large)  in=in_300K.fluid;;
+                    huge)   in=in_500K.fluid;;
+                esac
+                mv $in $target;;
+            freqmine)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                case $SIZE  in
+                    test)   in=T10I4D100K_3.dat;;
+                    tiny)   in=T10I4D100K_1k.dat;;
+                    small)  in=kosarak_250k.dat;;
+                    medium) in=kosarak_500k.dat;;
+                    large)  in=kosarak_990k.dat;;
+                    huge)   in=webdocs_250k.dat;;
+                esac
+                mv $in $target;;
+            raytrace)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                case $SIZE  in
+                    test) in=octahedron.obj;;
+                    tiny) in=bunny.obj;;
+                    small|medium|large)  in=happy_buddha.obj;;
+                    huge) in=thai_statue.obj;;
+                esac
+                mv $in $target;;
+            swaptions)
+                msg "no input needed for $bench"
+                return 0;;
+            vips)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                case $SIZE  in
+                    test|tiny) in=barbados_256x288.v;;
+                    small)     in=pomegranate_1600x1200.v;;
+                    medium)    in=vulture_2336x2336.v;;
+                    large)     in=bigben_2662x5500.v;;
+                    huge)      error "vips needs support for huge inputs";;
+                esac
+                mv $in $target;;
+            x264)
+                tar xf ${parsec_dir}/inputs/$INPUT
+                case $SIZE  in
+                    test)   in=eledream_32x18_1.y4m;;
+                    tiny)   in=eledream_64x36_3.y4m;;
+                    small)  in=eledream_640x360_8.y4m;;
+                    medium) in=eledream_640x360_32.y4m;;
+                    large)  in=eledream_640x360_128.y4m;;
+                    huge)   in=eledream_1920x1080_512.y4m;;
+                esac
+                mv $in $target;;
+
+            ## SHOOTOUT
+            binarytrees|chameneosredux|fannkuchredux|fasta|mandelbrot|meteor|nbody|pidigits)
+                msg "no input needed for $bench"
+                return 0;;
+
+            ## SPEC
+            bzip2)
+                SPEC_BENCH=$(echo "${SPEC_APPS[@]}"|tr ' ' '\n'|grep $bench)
+                mkdir -p "$bench_dir"
+                tmp=$(mktemp)
+                cp "$SPEC_ROOT"/benchspec/CPU2006/$SPEC_BENCH/data/train/input/byoudoin.jpg $tmp
+                case $SIZE in
+                    test)   convert -resize 50x75    $tmp $target;;
+                    tiny)   convert -resize 200x300  $tmp $target;;
+                    small)  convert -resize 400x600  $tmp $target;;
+                    medium) convert -resize 800x1200 $tmp $target;;
+                    large)  cp $tmp $target;;
+                esac
+                [ $? = 0 ] || error "input failed"
+                rm $tmp;;
+
+            h264ref)
+                SPEC_BENCH=$(echo "${SPEC_APPS[@]}"|tr ' ' '\n'|grep $bench)
+                H_DATA=$SPEC_ROOT/benchspec/CPU2006/$SPEC_BENCH/data
+                mkdir -p "$bench_dir"
+                cp ${H_DATA}/all/input/foreman_qcif.yuv $target
+                cp ${H_DATA}/train/input/foreman_train_encoder_baseline.cfg ${bench}.cfg;;
+
+            *) error "input not implemented for $bench";;
+        esac;
+        popd>/dev/null
+        msg "$bench/$target created";
+    fi; }
+
+output(){
+    local bench=$1;
+    local target=$bench.output;
+    local bench_dir="$BASE/benchmarks/$bench";
+    pushd "$bench_dir">/dev/null
+
+    if [ -f "$bench_dir/$target" ];then
+        msg "$bench/$target exists"
+    else
+        input $bench;
+        case $BENCHMARK in
+
+            ## PARSEC
+            blackscholes)
+                ./$bench 1 $bench.input $target;;
+            bodytrack)
+                # run the program
+                cp -R $bench.input $bench.backup
+                case $SIZE in
+                    test)   ./$bench $bench.input 4 1 5    1 0 1;;
+                    tiny)   ./$bench $bench.input 4 1 100  3 0 1;;
+                    small)  ./$bench $bench.input 4 1 1000 5 0 1;;
+                    medium) ./$bench $bench.input 4 2 2000 5 0 1;;
+                    large)  ./$bench $bench.input 4 4 4000 5 0 1;;
+                    huge)   ./$bench $bench.input 4 261 4000 5 0 1;;
+                esac
+                # collect the output
+                mv $bench.input $target
+                # replace the input
+                mv $bench.backup $bench.input
+                ;;
+            facesim)
+                cp -R $bench.input Face_Data
+                ./$bench -timing -threads 1
+                mv Storytelling $target
+                rm -rf Face_Data
+                ;;
+            ferret)
+                case $SIZE in
+                    test)   ./$bench $bench.input/corel lsh $bench.input/queries 5  5  1 $target;;
+                    tiny)   ./$bench $bench.input/corel lsh $bench.input/queries 5  5  1 $target;;
+                    small)  ./$bench $bench.input/corel lsh $bench.input/queries 10 20 1 $target;;
+                    medium) ./$bench $bench.input/corel lsh $bench.input/queries 10 20 1 $target;;
+                    large)  ./$bench $bench.input/corel lsh $bench.input/queries 10 20 1 $target;;
+                    huge)   ./$bench $bench.input/corel lsh $bench.input/queries 50 20 1 $target;;
+                esac >/dev/null 2>/dev/null ||error "output failed"
+                ;;
+            fluidanimate)
+                case $SIZE in
+                    test)   ./$bench 1 1 $bench.input $target;;
+                    tiny)   ./$bench 1 3 $bench.input $target;;
+                    small)  ./$bench 1 5 $bench.input $target;;
+                    medium) ./$bench 1 5 $bench.input $target;;
+                    large)  ./$bench 1 5 $bench.input $target;;
+                    huge)   ./$bench 1 500 $bench.input $target;;
+                esac
+                ;;
+            freqmine)
+                case $SIZE in
+                    test)   env OMP_NUM_THREADS=1 ./$bench $bench.input 1   $target;;
+                    tiny)   env OMP_NUM_THREADS=1 ./$bench $bench.input 3   $target;;
+                    small)  env OMP_NUM_THREADS=1 ./$bench $bench.input 220 $target;;
+                    medium) env OMP_NUM_THREADS=1 ./$bench $bench.input 410 $target;;
+                    large)  env OMP_NUM_THREADS=1 ./$bench $bench.input 790 $target;;
+                    huge)   env OMP_NUM_THREADS=1 ./$bench $bench.input 11000 $target;;
+                esac
+                ;;
+            raytrace)
+                case $SIZE in
+                    test)   ./$bench $bench.input -automove -nthreads 1 -frames 1 -res 1 1;;
+                    tiny)   ./$bench $bench.input -automove -nthreads 1 -frames 1 -res 16 16;;
+                    small)  ./$bench $bench.input -automove -nthreads 1 -frames 3 -res 480 270;;
+                    medium) ./$bench $bench.input -automove -nthreads 1 -frames 3 -res 960 540;;
+                    large)  ./$bench $bench.input -automove -nthreads 1 -frames 3 -res 1920 1080;;
+                    huge)   ./$bench $bench.input -automove -nthreads 1 -frames 200 -res 1920 1080;;
+                esac >$target;;
+            swaptions)
+                case $SIZE in
+                    test)   ./$bench -ns 1  -sm 5     -nt 1 2> $target;;
+                    tiny)   ./$bench -ns 3  -sm 50    -nt 1 2> $target;;
+                    small)  ./$bench -ns 16 -sm 10000 -nt 1 2> $target;;
+                    medium) ./$bench -ns 32 -sm 20000 -nt 1 2> $target;;
+                    large)  ./$bench -ns 64 -sm 40000 -nt 1 2> $target;;
+                    huge)   ./$bench -ns 128 -sm 1000000 -nt 1 2> $target;;
+                esac
+                ;;
+            vips)
+                tmp=$(mktemp XXXXXXXX.v)
+                rm -f $tmp
+                ./$bench --vips-concurrency=1 im_benchmark $bench.input $tmp
+                mv $tmp $target
+                ;;
+            x264)
+                X264_CMD=""
+                X264_CMD+=" --quiet --qp 20 --partitions b8x8,i4x4 --ref 5"
+                X264_CMD+=" --direct auto --b-pyramid --weightb --mixed-refs"
+                X264_CMD+=" --no-fast-pskip --me umh --subme 7"
+                X264_CMD+=" --analyse b8x8,i4x4 --threads 1"
+                tmp=$(mktemp XXXXXXXX.y4m)
+                cp $bench.input $tmp
+                ./$bench $X264_CMD -o $bench.output $tmp
+                rm -f $tmp
+                ;;
+
+            ## SHOOTOUT
+            chameneosredux|binarytrees|fannkuchredux|fasta|mandelbrot|meteor|nbody|pidigits)
+                ./$bench $(cmd_for_benchmark $bench) > $target;;
+
+            ## SPEC
+            bzip2)
+                ./$bench -c $bench.input > $target;;
+            h264ref)
+                case $SIZE in
+                    test)   FRAMES=1;;
+                    tiny)   FRAMES=2;;
+                    small)  FRAMES=4;;
+                    medium) FRAMES=6;;
+                    large)  FRAMES=8;;
+                esac
+                ./$bench -d $bench.cfg \
+                    -p FramesToBeEncoded=$FRAMES \
+                    -p InputFile="$bench.input" \
+                    -p OutputFile="$target"||error "output failed";;
+            *) error "output not implemented for $bench";;
+        esac;
+        popd>/dev/null
+        msg "$bench/$target created";
+    fi; }
+
+## Ensure the requisite benchmark suite is installed
+if echo "${PARSEC_APPS[@]}"|grep -q $BENCHMARK;then
+    parsec_dir="$BASE/benchmarks/parsec-3.0"
+    mkdir -p "$BASE/etc/data"
+    parsec_tar="$BASE/etc/data/parsec-3.0.tar.gz"
+    if [ ! -d "$parsec_dir" ];then
+        if [ ! -f "$parsec_tar" ];then
+            warning "downloading PARSEC"
+            wget http://parsec.cs.princeton.edu/download/3.0/parsec-3.0.tar.gz \
+                -O "$parsec_tar"
+        fi
+        msg "unpacking PARSEC"
+        tar xzf "$parsec_tar" -C "$BASE/benchmarks"
+    fi
+elif echo "${SHOOTOUT_APPS[@]}"|grep -q $BENCHMARK;then
+    shootout_dir="$BASE/benchmarks/benchmarksgame"
+    mkdir -p "$BASE/etc/data"
+    shootout_tar="$BASE/etc/data/benchmarksgame-scm-latest.tar.gz"
+    shootout_sub="benchmarksgame-$(date +%Y-%m-%d)/benchmarksgame"
+    if [ ! -d "$shootout_dir" ];then
+        if [ ! -f "$shootout_tar" ];then
+            warning "downloading SHOOTOUT"
+            wget https://alioth.debian.org/snapshots.php?group_id=100815 \
+                -O "$shootout_tar"
+        fi
+        msg "unpacking SHOOTOUT"
+        tar xzf "$shootout_tar" -C "$BASE/benchmarks" $shootout_sub
+        mv "$BASE/benchmarks/$shootout_sub" \
+            "$BASE/benchmarks/"
+        rmdir "$BASE/benchmarks/benchmarksgame-$(date +%Y-%m-%d)"
+    fi
+elif echo "${SPEC_APPS[@]}"|grep -q $BENCHMARK;then
+    if [ ! -d "$SPEC_ROOT" ] ; then
+        echo "could not find SPEC at $SPEC_ROOT"
+        error "install SPEC or set SPEC_ROOT to point to the right dir"
+    fi
+else
+    error "unknown benchmark $BENCHMARK"
+fi
+
+## Run the actions
+case $ACTION in
+    clean) rm -rf "$BASE/benchmarks/$BENCHMARK"
+        msg "$BENCHMARK/ removed"
+        exit 0;;
+
+    input) unpack $BENCHMARK && input $BENCHMARK;;
+
+    unpack|compile|link|output)
+
+        unpack $BENCHMARK
+        [[ $ACTION == "unpack" ]] && exit 0;
+
+        compile $BENCHMARK
+        [[ $ACTION == "compile" ]] && exit 0;
+
+        link $BENCHMARK
+        [[ $ACTION == "link" ]] && exit 0;
+
+        output $BENCHMARK
+        [[ $ACTION == "output" ]] && exit 0;
+        ;;
+
+    orig) unpack $BENCHMARK && orig $BENCHMARK;;
+
+    *) error "'$ACTION' is not a valid action\n";;
+esac
