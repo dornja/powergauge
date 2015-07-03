@@ -28,24 +28,30 @@ case $size in
 esac
 golden=`echo $input | sed -e 's/in/out/g'`
 
+outfile=`mktemp`
+tmpfit=`mktemp`
+
+cleanup() {
+    test -f "$outfile" && rm -f "$outfile"
+    test -f "$tmpfit"  && rm -f "$tmpfit"
+}
+
 check_status() {
     if [ $1 -ne 0 ] ; then
+        cleanup
         echo 0 > "$fitnessfile"
         exit $1
     fi
 }
 
-outfile=`mktemp`
-
-"$root"/bin/est-energy.py -o "$fitnessfile" -- "$exe" 1 $input $outfile
+"$root"/bin/est-energy.py -o "$tmpfit" -- "$exe" 1 $input $outfile
 check_status $?
 
 diff $outfile $golden > /dev/null 2>&1
 check_status $?
 
-rm -f $outfile
-fitness=`awk '{print 1/$1}' < "$fitnessfile"`
-echo $fitness > "$fitnessfile"
+awk '{print 1/$1}' < "$tmpfit" > "$fitnessfile"
+cleanup
 
 # exit 1 so that genprog doesn't find a "repair"
 exit 1
