@@ -21,8 +21,8 @@ def mymax( a, b ):
         return a
     return max( a, b )
 
-variant_pat = re.compile( r"^\t(\d+(\.\d+)?)\s+(.*)" )
-generation_pat = re.compile( r"generation (\d+) begins" )
+variant_pat = re.compile( r"^\t\s*(\d+(\.\d+)?)\s+(.*)" )
+generation_pat = re.compile( r"generation (\d+) " )
 
 original = None
 best = None
@@ -51,7 +51,9 @@ if options.csv is None:
     if original is not None:
         print "original:", original
     print "best:    ", best
-    print len( generation[ -1 ] )
+    if original is not None:
+        print "improvement: %2.4g%%" % ( ( 1 - ( original / best ) ) * 100 )
+    print "variants considered:", sum( map( len, generation ) )
 else:
     with open( options.csv, 'w' ) as fh:
         writer = csv.writer( fh )
