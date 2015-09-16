@@ -1,4 +1,5 @@
---program src/blackscholes.s
+--program multi.txt
+--prefix src
 --sanity no
 --single-fitness
 --pos-tests 1
@@ -8,6 +9,7 @@
 --fix-scheme uniform
 --fault-scheme uniform
 --search ssga
+--eviction-strategy tournament
 --popsize 512
 --max-evals 262144
 --seed 0

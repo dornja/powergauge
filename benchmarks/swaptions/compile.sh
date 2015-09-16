@@ -2,4 +2,6 @@
 
 # Usage: compile.sh __SOURCE_NAME__ __EXE_NAME__
 
-g++ -pthread -DENABLE_THREADS "$1" -o "$2"
+src=`dirname "$1"`/swaptions.s
+
+g++ -pthread -DENABLE_THREADS "$src" -o "$2"
