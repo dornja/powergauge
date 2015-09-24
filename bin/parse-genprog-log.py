@@ -8,6 +8,10 @@ parser = OptionParser( usage = "%prog [options] logfile" )
 parser.add_option(
     "--csv", metavar = "file", help = "write generations to csv file"
 )
+parser.add_option(
+    "--filter", metavar = "alg", choices = ( "steps", ),
+    help = "only include a subset of variants"
+)
 options, args = parser.parse_args()
 
 if len( args ) < 1:
@@ -28,16 +32,14 @@ original = None
 best = None
 
 gen = 0
-generation = list()
+table = list()
 with open( args[ 0 ] ) as fh:
     for line in fh:
-        while len( generation ) <= gen:
-            generation.append( list() )
         m = variant_pat.search( line )
         if m is not None:
             fitness = float( m.group( 1 ) )
             variant = m.group( 3 )
-            generation[ -1 ].append( ( fitness, variant ) )
+            table.append( ( gen, fitness, variant ) )
             if variant == "original":
                 original = fitness
             best = mymax( best, fitness )
@@ -53,12 +55,20 @@ if options.csv is None:
     print "best:    ", best
     if original is not None:
         print "improvement: %2.4g%%" % ( ( 1 - ( original / best ) ) * 100 )
-    print "variants considered:", sum( map( len, generation ) )
+    print "variants considered:", len( table )
 else:
+    if options.filter is not None:
+        if options.filter == "steps":
+            new_table = list()
+            current = None
+            for gen, fitness, variant in table:
+                if current is None or current < fitness:
+                    new_table.append( ( gen, fitness, variant ) )
+                    current = fitness
+            table = new_table
     with open( options.csv, 'w' ) as fh:
         writer = csv.writer( fh )
         writer.writerow( [ "generation", "fitness", "variant" ] )
-        for i, gen in enumerate( generation ):
-            for fitness, variant in gen:
-                writer.writerow( map( str, [ i, fitness, variant ] ) )
+        for gen, fitness, variant in table:
+            writer.writerow( map( str, [ gen, fitness, variant ] ) )
 
