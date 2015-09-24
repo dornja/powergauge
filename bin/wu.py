@@ -37,6 +37,10 @@ parser.add_option(
     help = "whether to store data internally (on WattsUp?) or externally"
 )
 parser.add_option( "-o", metavar = "file", help = "CSV file to generate" )
+parser.add_option(
+    "-r", "--repeat", metavar = "N", type = int, default = 1,
+    help = "repeat the command for extra measurements"
+)
 options, args = parser.parse_args()
 
 class InvalidMessage( StandardError ):
@@ -249,8 +253,9 @@ try:
         # available in case of a Ctrl-C.
 
         time.sleep( options.bracket )
-        p = Popen( cmd )
-        status = p.wait()
+        for i in range( options.repeat ):
+            p = Popen( cmd )
+            status = p.wait()
         time.sleep( options.bracket )
 except KeyboardInterrupt:
     if p is not None:
