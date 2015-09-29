@@ -52,14 +52,13 @@ def reduce_error( f, alpha, probes = 5 ):
     mean = 0.0
     M2   = 0.0
     errp = 1.0
-    xs = list()
 
     while alpha < errp:
         for i in range( probes ):
             x = f()
-            xs.append( x )
             if log is not None:
                 infomsg( x, fh = log )
+            yield x
             n = n + 1
             delta = x - mean
             mean = mean + delta / n
@@ -76,6 +75,4 @@ def reduce_error( f, alpha, probes = 5 ):
     if log is not None:
         infomsg( n, "probes: relative standard error =", errp, fh = log )
         debug_file = log
-
-    return xs
 
