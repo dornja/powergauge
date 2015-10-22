@@ -44,7 +44,28 @@ check_status() {
     fi
 }
 
-"$root"/bin/est-energy.py -o "$tmpfit" -- "$exe" $args 2> "$outfile" > /dev/null
+# We want to call the binary using several different wrappers. Possible reasons
+# for these wrappers include:
+#   - estimate energy usage
+#   - measure actual energy usage
+#   - disable address space randomization
+#   - force the process onto a particular CPU
+# We will accumulate the prefixes in $@. We must pay attention to the order
+# here, since, for example, we only want to estimate the energy of the binary,
+# not of the other tools...
+
+# estimate energy usage
+
+set x "$root"/bin/est-energy.py -o "$tmpfit" -- ; shift
+
+# disable address space randomization
+
+set x setarch `uname -m` -R "$@" ; shift
+
+########
+# run the command with the accumulated tools
+
+"$@" "$exe" $args 2> "$outfile" > /dev/null
 check_status $?
 
 if [ ! -r $golden ] ; then
