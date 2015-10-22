@@ -64,6 +64,8 @@ def reduce_error( f, alpha, probes = 5 ):
             mean = mean + delta / n
             M2 = M2 + delta * ( x - mean )
         var = M2 / ( n - 1 )
+        if var == 0:
+            break
         errp = sqrt( var / n ) / mean
         if n < 100:
             k = n // 2
