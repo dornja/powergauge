@@ -1,0 +1,16 @@
+--program multi.txt
+--prefix src
+--sanity no
+--single-fitness
+--pos-tests 1
+--neg-tests 0
+--compiler-command ./compile.sh __SOURCE_NAME__ __EXE_NAME__
+--test-command ./limit ./test.sh __EXE_NAME__ small __FITNESS_FILE__ > /dev/null
+--fix-scheme uniform
+--fault-scheme uniform
+--search ssga
+--eviction-strategy tournament
+--fitness-log ss-tourney.csv
+--popsize 512
+--max-evals 262144
+--seed 0
