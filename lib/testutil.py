@@ -70,7 +70,7 @@ def reduce_error( f, alpha, probes = 5 ):
         if n < 100:
             k = n // 2
             c4 = sqrt( pi / k ) * factorial ( 2*k-1 ) / ( 2 ** ( 2*k-1 ) * factorial( k - 1 ) ** 2 )
-            errp = c4 * errp
+            errp = errp / c4
 
         probes += probes
 
