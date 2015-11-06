@@ -56,7 +56,9 @@ else
 
     mkdir -p src
     for f in pthreads cellpool parsec_barrier ; do
-        $CXX -S ${CFLAGS} ${LDFLAGS} -pthread -c $prefix/src/$f.cpp -o src/$f.s
+        $CXX -S ${CFLAGS} ${LDFLAGS} -pthread \
+            -c $prefix/src/$f.cpp -o src/$f.s \
+            || exit $?
     done
 
     # Also copy the inputs from the parsec directory into the local directory

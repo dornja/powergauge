@@ -6,3 +6,6 @@ benchmarks/bodytrack/src
 benchmarks/ferret/inputs
 benchmarks/ferret/outputs
 benchmarks/ferret/src
+benchmarks/fluidanimate/inputs
+benchmarks/fluidanimate/outputs
+benchmarks/fluidanimate/src
