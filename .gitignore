@@ -3,3 +3,6 @@
 benchmarks/bodytrack/inputs
 benchmarks/bodytrack/outputs
 benchmarks/bodytrack/src
+benchmarks/ferret/inputs
+benchmarks/ferret/outputs
+benchmarks/ferret/src

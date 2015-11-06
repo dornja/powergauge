@@ -90,6 +90,13 @@ else
     parsec=$1
     prefix=$parsec/pkgs/apps/ferret
 
+    # First, build the libraries this package depends on
+
+    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p gsl -a clean
+    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p gsl -a build
+    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p libjpeg -a clean
+    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p libjpeg -a build
+
     # Need to know the compilation platform to know which gsl and jpeg libraries
     # to use
 
@@ -121,7 +128,8 @@ else
     do
         $CC -S $CPPFLAGS $CFLAGS $LDFLAGS \
             -c $f \
-            -o src/`basename $f .c`.s
+            -o src/`basename $f .c`.s \
+            || exit $?
     done
 
     # Copy the libraries we need so that we don't have to remember the
