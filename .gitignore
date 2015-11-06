@@ -1,1 +1,5 @@
 *.pyc
+
+benchmarks/bodytrack/inputs
+benchmarks/bodytrack/outputs
+benchmarks/bodytrack/src

@@ -70,6 +70,12 @@ else
         exit
     fi
 
+    # First, build the package through parsec so that the config.h file is
+    # available.
+
+    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p bodytrack -a clean
+    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p bodytrack -a build
+
     prefix=$1/pkgs/apps/bodytrack
 
     # Need to get the directory where parsec built this package for config.h
@@ -98,21 +104,24 @@ else
 
     for f in FlexImage FlexIO ; do
         $CXX -S `cppflags` ${CXXFLAGS} ${LDFLAGS} -fPIC -DPIC \
-            -c $prefix/src/FlexImageLib/$f.cpp -o src/$f.s
+            -c $prefix/src/FlexImageLib/$f.cpp -o src/$f.s \
+            || exit $?
     done
 
     # Compile the threading library
 
     for f in Thread ThreadGroup WorkerGroup Mutex Condition Barrier RWLock ; do
         $CXX -S `cppflags` -pthread ${CXXFLAGS} ${LDFLAGS} -fPIC -DPIC \
-            -c $prefix/src/TrackingBenchmark/threads/$f.cpp -o src/$f.s
+            -c $prefix/src/TrackingBenchmark/threads/$f.cpp -o src/$f.s \
+            || exit $?
     done
 
     # Compile the benchmark itself
 
     for f in AnnealingFactor BodyGeometry BodyPose CameraModel CovarianceMatrix ImageMeasurements ImageProjection RandomGenerator TrackingModel main TrackingModelPthread AsyncIO ; do
         $CXX -S `cppflags` -I$prefix/src/FlexImageLib ${CXXFLAGS} ${LDFLAGS} \
-            -c $prefix/src/TrackingBenchmark/$f.cpp -o src/$f.s
+            -c $prefix/src/TrackingBenchmark/$f.cpp -o src/$f.s \
+            || exit $?
     done
 
     # Also copy the inputs from the parsec directory into the local directory
@@ -125,3 +134,4 @@ else
     done
     popd
 fi
+

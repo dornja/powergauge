@@ -31,7 +31,7 @@ case $size in
 esac
 shift
 input=$2
-golden=`echo $input | sed -e 's/in/out/g'`
+golden="outputs/$size"
 
 backup=`mktemp --suffix .tgz`
 tmpfit=`mktemp`
@@ -65,7 +65,7 @@ if [ ! -d "$golden" ] ; then
     ( cd "$input" ; tar cf - . ) | ( cd "$golden" ; tar xf - )
 fi
 
-diff -r $input $golden
+diff -r $input $golden > /dev/null 2>&1
 check_status $?
 
 awk '{print 1/$1}' < "$tmpfit" > "$fitnessfile"
