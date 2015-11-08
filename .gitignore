@@ -9,3 +9,6 @@ benchmarks/ferret/src
 benchmarks/fluidanimate/inputs
 benchmarks/fluidanimate/outputs
 benchmarks/fluidanimate/src
+benchmarks/freqmine/inputs
+benchmarks/freqmine/outputs
+benchmarks/freqmine/src

@@ -63,7 +63,8 @@ else
     mkdir -p src
     for f in $prefix/src/*.cpp ; do
         $CXX -S ${CFLAGS} ${LDFLAGS} ${CPPFLAGS} \
-            -c $f -o src/`basename $f .cpp`.s
+            -c $f -o src/`basename $f .cpp`.s \
+            || exit $?
     done
 
     # Also copy the inputs from the parsec directory into the local directory

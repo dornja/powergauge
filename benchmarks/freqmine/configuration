@@ -10,7 +10,6 @@
 --fault-scheme uniform
 --search ssga
 --eviction-strategy tournament
---fitness-log ss-tourney.csv
 --popsize 512
 --max-evals 262144
 --seed 0
