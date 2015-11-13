@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python
 
 from contextlib import contextmanager
 from numpy.distutils import cpuinfo
