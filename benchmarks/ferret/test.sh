@@ -63,7 +63,7 @@ check_status() {
 run_test "$@" "$output" > /dev/null 2>&1
 check_status $?
 
-if [ ! -d "$golden" ] ; then
+if [ ! -r "$golden" ] ; then
     mkdir -p `dirname "$golden"`
     cp "$output" "$golden"
 fi
