@@ -1,13 +1,15 @@
 #!/usr/bin/python2
 
+from contextlib import closing, contextmanager
 from difflib import SequenceMatcher
 import numpy
 from optparse import OptionParser
 import os
 import re
+import shelve
 from scipy.stats import mannwhitneyu
 import shutil
-from subprocess import call
+from subprocess import call, CalledProcessError
 import sys
 import tempfile
 
@@ -31,12 +33,24 @@ parser.add_option(
     "--genome", metavar = "genome", help = "minimize set of edits in genome"
 )
 parser.add_option(
+    "--genome-file", metavar = "file",
+    help = "minimize set of edits in the named file"
+)
+parser.add_option(
     "--sources", metavar = "prefix",
     help = "minimize line-by-line deltas from original to sources in prefix"
 )
 parser.add_option(
+    "--search", metavar = "alg",
+    choices = ( "delta", "brute" ), default = "delta",
+    help = "algorithm for minimizing the deltas"
+)
+parser.add_option(
     "--alpha", metavar = "a", type = float, default = 0.05,
     help = "alpha value for statistically differentiating energy distributions"
+)
+parser.add_option(
+    "--cache", metavar = "file", help = "cache fitness results to named file"
 )
 parser.add_option(
     "--compound-edits", action = "store_true",
@@ -51,12 +65,18 @@ options, args = parser.parse_args()
 if len( args ) < 2:
     parser.print_help()
     exit()
-if options.genome is None and options.sources is None:
-    print >>sys.stderr, "ERROR: either --genome or --sources is required"
-    parser.print_help()
-    exit( 1 )
-if options.genome is not None and options.sources is not None:
-    print >>sys.stderr, "ERROR: --genome and --sources are mutually exclusive"
+
+deltas = None
+if options.genome is not None:
+    deltas = options.genome.split()
+elif options.genome_file is not None:
+    with open( options.genome_file ) as fh:
+        deltas = " ".join( fh.readlines() ).split()
+elif options.sources is not None:
+    print >>sys.stderr, "file-based differences not implemented yet"
+    exit( 2 )
+if deltas is None:
+    print >>sys.stderr, "ERROR: either --genome, --genome-file or --sources is required"
     parser.print_help()
     exit( 1 )
 
@@ -70,71 +90,139 @@ configfile = args[ 1 ]
 def first( sequence ):
     return list( map( lambda (_,y): y, sequence ) )
 
+class GenomeBuilder:
+    def __init__( self, genprog ):
+        self.genprog = genprog
+
+    def build( self, genome ):
+        if len( genome ) == 0:
+            infomsg( "INFO: genome: original" )
+        else:
+            infomsg( "INFO: genome:", *first( genome ) )
+        return self.genprog.build_variant( first( genome ) )
+
+    def key( self, genome ):
+        return " ".join( first( genome ) )
+
 class DDGenome( DD ):
-    def __init__( self, config, genome ):
+    def __init__( self, genprog, builder, deltas ):
         DD.__init__( self )
-        self.genprog = GenProgEnv( genprog, config )
+        self.builder = builder
+        self.genprog = genprog
 
         infomsg( "INFO: computing optimized energy usage" )
-        infomsg( "INFO: genome:", *first( genome ) )
-        with self.genprog.build_variant( first( genome ) ) as exe:
-            tester = self.test_func( exe )
-            self.optimized = list( reduce_error( tester, options.low_error, 20 ) )
+        self.optimized = self.get_fitness( deltas )
         self.mean = numpy.mean( self.optimized )
 
-    def test_func( self, exe ):
-        def runner():
-            fitness = self.genprog.run_test( exe )
-            infomsg( "   ", fitness )
+    def get_fitness( self, deltas ):
+        global cache
+        key = self.builder.key( deltas )
+        if key in cache:
+            return cache[ key ]
+        with self.builder.build( deltas ) as exe:
+            if exe is None:
+                cache[ key ] = list()
+                return list()
+            def tester():
+                fitness = self.genprog.run_test( exe )
+                infomsg( "   ", fitness )
+                return fitness
+            fitness = list( reduce_error( tester, options.low_error, 20 ) )
+            cache[ key ] = fitness
             return fitness
-        return runner
 
     def _test( self, deltas ):
         # "Passing" behavior is more like the original (slower, more energy).
         # "Failing" behavior is more optimized (faster, less energy).
 
-        infomsg( "INFO: genome:", *first( deltas ) )
-        with self.genprog.build_variant( first( deltas ) ) as exe:
-            if exe is None:
+        try:
+            fitness = self.get_fitness( deltas )
+            if len( fitness ) == 0:
                 return self.UNRESOLVED
+            if any( map( lambda f: f == 0, fitness ) ):
+                return self.UNRESOLVED
+            pval = mannwhitneyu( self.optimized, fitness )[ 1 ]
+            if pval < options.alpha and numpy.mean( fitness ) < self.mean:
+                return self.PASS
             else:
-                tester = self.test_func( exe )
-                fitness = list( reduce_error( tester, options.low_error, 20 ) )
-                pval = mannwhitneyu( self.optimized, fitness )[ 1 ]
-                if pval < options.alpha and numpy.mean( fitness ) < self.mean:
-                    return self.PASS
+                return self.FAIL
+        except CalledProcessError:
+            return self.UNRESOLVED
+
+########
+# 
+########
+
+def brute_force( dd, deltas ):
+    def powerset( deltas ):
+        if len( deltas ) == 0:
+            yield list()
+        else:
+            for grp in powerset( deltas[ 1: ] ):
+                yield grp
+                yield [ deltas[ 0 ] ] + grp
+    best = deltas
+    for grp in powerset( deltas ):
+        if len( grp ) >= len( best ):
+            continue
+        if dd._test( grp ) == dd.FAIL:
+            best = grp
+    return best
+
+def get_builder( deltas ):
+    if options.sources is None:
+        if not options.compound_edits:
+            fieldpat = re.compile( r'[a-z]\((\d+),(\d+)\)' )
+            pending = list( reversed( deltas ) )
+            deltas = list()
+            while len( pending ) > 0:
+                gene = pending.pop()
+                if gene[ 0 ] == 'a':
+                    deltas.append( gene )
+                elif gene[ 0 ] == 'd':
+                    deltas.append( gene )
+                elif gene[ 0 ] == 'r':
+                    m = fieldpat.match( gene )
+                    dst, src = m.group( 1, 2 )
+                    pending += [ 'd(%s)' % dst, 'a(%s,%s)' % ( dst, src ) ]
+                elif gene[ 0 ] == 's':
+                    m = fieldpat.match( gene )
+                    dst, src = m.group( 1, 2 )
+                    pending += [
+                        'r(%s,%s)' % ( dst, src ),
+                        'r(%s,%s)' % ( src, dst )
+                    ]
                 else:
-                    return self.FAIL
+                    infomsg( "ERROR: unrecognized gene:", gene )
+                    exit( 1 )
+        deltas = list( enumerate( deltas ) )
+        builder = GenomeBuilder( genprog )
+    else:
+        print >>sys.stderr, "file-based differences not implemented yet"
+        exit( 2 )
+    return deltas, builder
 
-if options.genome is not None:
-    genome = options.genome.split()
-    if not options.compound_edits:
-        fieldpat = re.compile( r'[a-z]\((\d+),(\d+)\)' )
-        pending = list( reversed( genome ) )
-        genome = list()
-        while len( pending ) > 0:
-            gene = pending.pop()
-            if gene[ 0 ] == 'a':
-                genome.append( gene )
-            elif gene[ 0 ] == 'd':
-                genome.append( gene )
-            elif gene[ 0 ] == 'r':
-                m = fieldpat.match( gene )
-                dst, src = m.group( 1, 2 )
-                pending += [ 'd(%s)' % dst, 'a(%s,%s)' % ( dst, src ) ]
-            elif gene[ 0 ] == 's':
-                m = fieldpat.match( gene )
-                dst, src = m.group( 1, 2 )
-                pending += [ 'r(%s,%s)' % ( dst, src ), 'r(%s,%s)' % ( src, dst ) ]
-            else:
-                infomsg( "ERROR: unrecognized gene:", gene )
-                exit( 1 )
-    genome = list( enumerate( genome ) )
-    dd = DDGenome( configfile, genome )
+@contextmanager
+def memcache():
+    yield dict()
+
+########
+#
+########
+
+genprog = GenProgEnv( genprog, configfile )
+
+if options.cache is not None:
+    get_cache = lambda: closing( shelve.open( options.cache ) )
 else:
-    print >>sys.stderr, "file-based differences not implemented yet"
-    exit( 2 )
+    get_cache = memcache
 
-genome = dd.ddmin( genome )
-infomsg( "simplified genome:\n   ", *first( genome ) )
+with get_cache() as cache:
+    deltas, builder = get_builder( deltas )
+    dd = DDGenome( genprog, builder, deltas )
+    if options.search == "delta":
+        deltas = dd.ddmin( deltas )
+    else:
+        deltas = brute_force( dd, deltas )
+    infomsg( "simplified genome:\n   ", *first( deltas ) )
 

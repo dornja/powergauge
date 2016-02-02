@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python
 
 from contextlib import contextmanager
 from numpy.distutils import cpuinfo
@@ -67,6 +67,17 @@ def intel_sandybridge_power_model( d ):
         2962.678 * ( d[ "cache-misses" ] / d[ "cycles" ] )
     )
 
+#This is the trained energy coefficients for Prime
+def intel_xeon_prime_power_model( d ):
+    return d[ "seconds" ] * (
+          151.396 +
+          14.575 * ( d[ "instructions" ] / d[ "cycles" ] ) +
+          2.681 * ( ( d[ "r532010" ] + d[ "r538010" ] ) / d[ "cycles" ] ) +
+          -806.480 * ( d[ "cache-references" ] / d[ "cycles" ] ) +
+          597.546 * ( d[ "cache-misses" ] / d[ "cycles" ] )
+    )
+   
+
 counters = [
     "cycles",
     "instructions",
@@ -82,5 +93,7 @@ if options.o is None:
     fh = sys.stdout
 else:
     fh = open( options.o, 'w' )
-print >>fh, intel_sandybridge_power_model( collect_counters( counters, args ) )
+print(intel_sandybridge_power_model( collect_counters( counters, args ) ), file=fh)
+#Prime power model
+#print(intel_xeon_prime_power_model( collect_counters( counters, args ) ), file=fh)
 
