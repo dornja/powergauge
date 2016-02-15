@@ -2,7 +2,10 @@
 
 # Usage: test.sh __EXE_NAME__ size __FITNESS_FILE__
 
-#echo $0 "$@" >> testlog
+if [ $# -lt 3 ] ; then
+    echo "Usage: $0 __EXE_NAME__ size __FITNESS_FILE__"
+    exit 2
+fi
 
 exe=$1
 size=$2
@@ -28,30 +31,45 @@ case $size in
 esac
 golden=`echo $input | sed -e 's/in/out/g'`
 
-outfile=`mktemp`
-tmpfit=`mktemp`
+run_test() {
+    set x "$root"/bin/est-energy.py -o "$tmpfit" -- "$@" ; shift
+    set x setarch `uname -m` -R "$@" ; shift
+    "$@"
+}
 
 cleanup() {
-    test -f "$outfile" && rm -f "$outfile"
-    test -f "$tmpfit"  && rm -f "$tmpfit"
+    status=$?
+    test -f "$output" && rm -f "$output"
+    test -f "$tmpfit" && rm -f "$tmpfit"
+    exit $status
 }
 
 check_status() {
     if [ $1 -ne 0 ] ; then
-        cleanup
         echo 0 > "$fitnessfile"
         exit $1
     fi
 }
 
-"$root"/bin/est-energy.py -o "$tmpfit" -- "$exe" 1 $input $outfile
+trap cleanup EXIT INT
+
+output=`mktemp`
+tmpfit=`mktemp`
+
+# disable address space randomization
+run_test "$exe" 1 "$input" "$output"
 check_status $?
 
-diff $outfile $golden > /dev/null 2>&1
+if [ ! -r "$golden" ] ; then
+    mkdir -p `dirname "$golden"`
+    cp "$output" "$golden"
+fi
+
+diff "$output" "$golden" > /dev/null 2>&1
 check_status $?
 
 awk '{print 1/$1}' < "$tmpfit" > "$fitnessfile"
-cleanup
 
 # exit 1 so that genprog doesn't find a "repair"
 exit 1
+
