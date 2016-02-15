@@ -113,6 +113,7 @@ class DDGenome( DD ):
         infomsg( "INFO: computing optimized energy usage" )
         self.optimized = self.get_fitness( deltas )
         self.mean = numpy.mean( self.optimized )
+        assert self.mean > 0, "'optimized' variant has 0 fitness!"
 
     def get_fitness( self, deltas ):
         global cache
@@ -127,7 +128,12 @@ class DDGenome( DD ):
                 fitness = self.genprog.run_test( exe )
                 infomsg( "   ", fitness )
                 return fitness
-            fitness = list( reduce_error( tester, options.low_error, 20 ) )
+            fitness = list()
+            for value in reduce_error( tester, options.low_error, 20 ):
+                if value == 0:
+                    fitness = [ 0 ]
+                    break
+                fitness.append( value )
             cache[ key ] = fitness
             return fitness
 
@@ -146,7 +152,8 @@ class DDGenome( DD ):
                 return self.PASS
             else:
                 return self.FAIL
-        except CalledProcessError:
+        except CalledProcessError as e:
+            infomsg( "ERROR:", e )
             return self.UNRESOLVED
 
 ########
@@ -219,10 +226,13 @@ else:
 
 with get_cache() as cache:
     deltas, builder = get_builder( deltas )
+    infomsg( "found", len( deltas ), "deltas" )
     dd = DDGenome( genprog, builder, deltas )
     if options.search == "delta":
         deltas = dd.ddmin( deltas )
     else:
         deltas = brute_force( dd, deltas )
     infomsg( "simplified genome:\n   ", *first( deltas ) )
-
+    base = dd.get_fitness( [] )
+    optim = dd.get_fitness( deltas )
+    infomsg( "improvement:", 1 - numpy.mean( base ) / numpy.mean( optim ) )
