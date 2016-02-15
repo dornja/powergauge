@@ -3,6 +3,7 @@
 import csv
 from optparse import OptionParser
 import re
+import sys
 
 parser = OptionParser( usage = "%prog [options] logfile" )
 parser.add_option(
@@ -18,36 +19,75 @@ if len( args ) < 1:
     parser.print_help()
     exit()
 
-def mymax( a, b ):
+def optmax( a, b ):
     if a is None:
         return b
     if b is None:
         return a
     return max( a, b )
 
-variant_pat = re.compile( r"^\t\s*(\d+(\.\d+)?)\s+(.*)" )
-generation_pat = re.compile( r"generation (\d+) " )
+def getEntries( linesrc ):
+    variant_pat = re.compile( r"^\t\s*(\d+(\.\d+)?)\s+(.*)" )
+    generation_pat = re.compile( r"generation (\d+) " )
 
-original = None
-best = None
-
-gen = 0
-table = list()
-with open( args[ 0 ] ) as fh:
-    for line in fh:
+    gen = 0
+    for line in linesrc:
         m = variant_pat.search( line )
         if m is not None:
             fitness = float( m.group( 1 ) )
             variant = m.group( 3 )
-            table.append( ( gen, fitness, variant ) )
-            if variant == "original":
-                original = fitness
-            best = mymax( best, fitness )
+            yield gen, fitness, variant
             continue
         m = generation_pat.search( line )
         if m is not None:
             gen = int( m.group( 1 ) )
             continue
+
+def statsFilter( entries ):
+    global best
+    global numEntries
+    global original
+
+    for gen, fitness, variant in entries:
+        numEntries += 1
+        if variant == "original":
+            original = fitness
+        best = optmax( best, fitness )
+        yield gen, fitness, variant
+
+def stepsFilter( entries ):
+    current = None
+    for gen, fitness, variant in entries:
+        if current is None or current < fitness:
+            current = fitness
+            yield gen, fitness, variant
+
+original = None
+best = None
+numEntries = 0
+
+if options.csv is None:
+    out = open( "/dev/null", 'w' )
+else:
+    out = open( options.csv, 'w' )
+try:
+    writer = csv.writer( out )
+    writer.writerow( [ "generation", "fitness", "variant" ] )
+    with open( args[ 0 ] ) as fh:
+        source = statsFilter( getEntries( fh ) )
+        if options.filter is not None:
+            source = stepsFilter( source )
+        for row in source:
+            try:
+                writer.writerow( map( str, row ) )
+            except IOError as e:
+                # if this is piped to head, python will complain when the pipe
+                # is closed
+                if e.strerror == "Broken pipe":
+                    break
+                raise e
+finally:
+    out.close()
 
 if options.csv is None:
     if original is not None:
@@ -55,20 +95,5 @@ if options.csv is None:
     print "best:    ", best
     if original is not None:
         print "improvement: %2.4g%%" % ( ( 1 - ( original / best ) ) * 100 )
-    print "variants considered:", len( table )
-else:
-    if options.filter is not None:
-        if options.filter == "steps":
-            new_table = list()
-            current = None
-            for gen, fitness, variant in table:
-                if current is None or current < fitness:
-                    new_table.append( ( gen, fitness, variant ) )
-                    current = fitness
-            table = new_table
-    with open( options.csv, 'w' ) as fh:
-        writer = csv.writer( fh )
-        writer.writerow( [ "generation", "fitness", "variant" ] )
-        for gen, fitness, variant in table:
-            writer.writerow( map( str, [ gen, fitness, variant ] ) )
+    print "variants considered:", numEntries
 
