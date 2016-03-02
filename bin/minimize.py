@@ -57,6 +57,10 @@ parser.add_option(
     help = "do not convert swaps and replaces into appends and deletes"
 )
 parser.add_option(
+    "--save-binary", metavar = "file",
+    help = "save the minimized binary to the named file"
+)
+parser.add_option(
     "--low-error", metavar = "p", type = float, default = 0.01,
     help = "repeat measurements until (standard error / mean) < (1+p)"
 )
@@ -125,7 +129,7 @@ class DDGenome( DD ):
                 cache[ key ] = list()
                 return list()
             def tester():
-                fitness = self.genprog.run_test( exe )
+                fitness = self.genprog.run_test( exe )[ 0 ]
                 infomsg( "   ", fitness )
                 return fitness
             fitness = list()
@@ -236,3 +240,9 @@ with get_cache() as cache:
     base = dd.get_fitness( [] )
     optim = dd.get_fitness( deltas )
     infomsg( "improvement:", 1 - numpy.mean( base ) / numpy.mean( optim ) )
+
+if options.save_binary is not None:
+    with builder.build( deltas ) as exe:
+        os.rename( exe, options.save_binary )
+    infomsg( "saved binary to", options.save_binary )
+

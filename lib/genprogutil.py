@@ -73,5 +73,5 @@ class GenProgEnv:
             tmp = cmd.replace( "__FITNESS_FILE__", fitnessfile )
             call( [ "sh", "-c", tmp ] )
             with open( fitnessfile ) as fh:
-                return float( fh.next().strip() )
+                return map( float, fh.next().split() )
 
