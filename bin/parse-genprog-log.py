@@ -10,8 +10,12 @@ parser.add_option(
     "--csv", metavar = "file", help = "write generations to csv file"
 )
 parser.add_option(
-    "--filter", metavar = "alg", choices = ( "steps", ),
+    "--filter", metavar = "alg", choices = ( "regression", "steps", ),
     help = "only include a subset of variants"
+)
+parser.add_option(
+    "--stop-after", metavar = "N", type = int,
+    help = "stop after reading the first N variants"
 )
 options, args = parser.parse_args()
 
@@ -30,6 +34,7 @@ def getEntries( linesrc ):
     variant_pat = re.compile( r"^\t\s*(\d+(\.\d+)?)\s+(.*)" )
     generation_pat = re.compile( r"generation (\d+) " )
 
+    count = 0
     gen = 0
     for line in linesrc:
         m = variant_pat.search( line )
@@ -37,6 +42,9 @@ def getEntries( linesrc ):
             fitness = float( m.group( 1 ) )
             variant = m.group( 3 )
             yield gen, fitness, variant
+            count += 1
+            if options.stop_after is not None and count >= options.stop_after:
+                break
             continue
         m = generation_pat.search( line )
         if m is not None:
@@ -54,6 +62,19 @@ def statsFilter( entries ):
             original = fitness
         best = optmax( best, fitness )
         yield gen, fitness, variant
+
+def regressionFilter( entries ):
+    global original
+
+    pending = list()
+    for entry in entries:
+        pending.append( entry )
+        if original is None:
+            continue
+        while len( pending ) > 0:
+            gen, fitness, variant = pending.pop( 0 )
+            if fitness < original:
+                yield gen, fitness, variant
 
 def stepsFilter( entries ):
     current = None
@@ -76,7 +97,10 @@ try:
     with open( args[ 0 ] ) as fh:
         source = statsFilter( getEntries( fh ) )
         if options.filter is not None:
-            source = stepsFilter( source )
+            if options.filter == "steps":
+                source = stepsFilter( source )
+            elif options.filter == "regression":
+                source = regressionFilter( source )
         for row in source:
             try:
                 writer.writerow( map( str, row ) )
