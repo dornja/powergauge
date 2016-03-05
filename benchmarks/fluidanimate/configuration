@@ -5,7 +5,7 @@
 --pos-tests 1
 --neg-tests 0
 --compiler-command ./compile.sh __SOURCE_NAME__ __EXE_NAME__
---test-command ./limit ./test.sh __EXE_NAME__ medium __FITNESS_FILE__ > /dev/null
+--test-command ./test.py -j 7 __EXE_NAME__ medium __FITNESS_FILE__
 --fix-scheme uniform
 --fault-scheme uniform
 --search ssga
