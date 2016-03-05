@@ -4,36 +4,11 @@ from math import factorial, pi, sqrt
 from optparse import OptionGroup, OptionParser
 import os
 import platform
-from subprocess import check_call, Popen, CalledProcessError
+from subprocess import call, check_call, Popen, CalledProcessError
 import sys
 from util import infomsg, mktemp
 
 debug_file = None
-
-def get_fitness(
-        root, run_cmd, validate_cmd = None,
-        stdout = sys.stdout, stderr = sys.stderr ):
-    with mktemp() as tmpfit:
-        cmd = [
-            os.path.join( root, "bin", "limit" ),
-            os.path.join( root, "bin", "est-energy.py" ), "-o", tmpfit,
-            "--",
-        ] + run_cmd
-
-        if debug_file is not None:
-            infomsg( "DEBUG:", *cmd, file = debug_file )
-        check_call( cmd, stdout = stdout, stderr = stderr )
-
-        if validate_cmd is not None:
-            if debug_file is not None:
-                infomsg( "DEBUG:", *validate_cmd, file = debug_file )
-            check_call( validate_cmd, stdout = stdout, stderr = stderr )
-
-        with open( tmpfit ) as fh:
-            line = fh.next().strip()
-            if debug_file is not None:
-                infomsg( "DEBUG: raw fitness:", line, file = debug_file )
-            return 1.0 / float( line )
 
 def reduce_error( f, alpha, probes = 5 ):
     global debug_file
@@ -107,7 +82,7 @@ class Multitmp:
     def close( self ):
         for fname in self.fnames:
             if os.path.exists( fname ):
-                os.remove( fname )
+                call( [ "rm", "-rf", fname ] )
         del self.fnames
 
     @staticmethod
@@ -159,7 +134,7 @@ class Multitmp:
                         cmd = tmpcmd, returncode = p.returncode
                     )
         finally:
-            for p in procs:
+            for p, _ in procs:
                 p.kill()
             for fh in open_files:
                 fh.close()
@@ -174,15 +149,22 @@ class ParallelTest:
     def getCommand( self, outfile ):
         raise NotImplementedError( "getCommand()" )
 
+    def getGolden( self ):
+        return "outputs/%s.txt" % self.size
+
     def validateCorrectness( self, outfile ):
-        golden = "outputs/%s.txt" % self.size
+        golden = self.getGolden()
 
         new_golden = False
         if not os.path.exists( golden ):
             if self.options.create_golden:
                 if not os.path.exists( os.path.dirname( golden ) ):
                     os.makedirs( os.path.dirname( golden ) )
-                check_call( [ "cp", next( iter( outfile ) ), golden ] )
+                fname = next( iter( outfile ) )
+                if os.path.isdir( fname ):
+                    check_call( [ "rsync", "-a", fname + "/", golden ] )
+                else:
+                    check_call( [ "cp", "-p", fname, golden ] )
                 new_golden = True
             else:
                 raise IOError( 2, "No such file or directory", golden )
@@ -190,13 +172,15 @@ class ParallelTest:
         try:
             with open( "/dev/null", 'w' ) as null:
                 Multitmp.check_call(
-                    [ "diff", outfile, golden ],
+                    [ "diff", "-r", outfile, golden ],
                     stdout = null, stderr = null, verbose = self.options.verbose
                 )
         except Exception as e:
             if new_golden:
-                os.remove( golden )
-            raise e
+                check_call( [ "rm", "-rf", golden ] )
+            if isinstance( e, CalledProcessError ):
+                return False
+            raise
 
         return True
 
@@ -225,6 +209,10 @@ class ParallelTest:
             help = "treat this run as the 'golden' run with the correct result"
         )
         group.add_option(
+            "--no-limit", action = "store_true",
+            help = "do not limit run time of tested command"
+        )
+        group.add_option(
             "--verbose", action = "store_true",
             help = "show commands that are executed"
         )
@@ -239,13 +227,14 @@ class ParallelTest:
                     kw.setdefault( "stderr", null )
                     kw[ "verbose" ] = self.options.verbose
 
-                    cmd = [
-                        "setarch", platform.machine(), "-R",
-                        os.path.join( root, "bin", "limit" ),
+                    prefix = [ "setarch", platform.machine(), "-R" ]
+                    if not self.options.no_limit:
+                        prefix += [ os.path.join( root, "bin", "limit" ) ]
+                    prefix += [
                         os.path.join( root, "bin", "est-energy.py" ), "-o", tmpfit,
                         "--"
-                    ] + cmd
-                    Multitmp.check_call( cmd, **kw )
+                    ]
+                    Multitmp.check_call( prefix + cmd, **kw )
 
                 results = list()
                 if self.validateCorrectness( output ):
