@@ -4,16 +4,16 @@ import sys
 import tempfile
 
 def infomsg( arg1, *args, **kwargs ):
-    fh = kwargs.get( "fh", sys.stdout )
-    extra = set( kwargs.keys() ) - { "fh" }
-    if len( extra ) > 0:
+    fh = kwargs.pop( "file", sys.stdout )
+    if len( kwargs ) > 0:
         raise TypeError(
           "infomsg() got an unexpected keyword argument '%s'" %
-            next( iter( extra ) )
+            kwargs.keys()[ 0 ]
         )
 
     args = " ".join( map( str, [ arg1 ] + list( args ) ) )
-    print >>fh, args
+    fh.write( args )
+    fh.write( '\n' )
     fh.flush()
     try:
         os.fsync( fh.fileno() )
