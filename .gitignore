@@ -1,5 +1,12 @@
 *.pyc
+multi.cache
+repair.cache
+repair.debug.*
 
+repair/
+
+benchmarks/blackscholes/inputs
+benchmarks/blackscholes/outputs
 benchmarks/bodytrack/inputs
 benchmarks/bodytrack/outputs
 benchmarks/bodytrack/src
@@ -12,3 +19,4 @@ benchmarks/fluidanimate/src
 benchmarks/freqmine/inputs
 benchmarks/freqmine/outputs
 benchmarks/freqmine/src
+pintool/obj-*

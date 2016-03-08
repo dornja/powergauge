@@ -20,8 +20,10 @@ def infomsg( arg1, *args, **kwargs ):
     except OSError: pass
 
 @contextmanager
-def mktemp( suffix = '' ):
-    tmp = tempfile.NamedTemporaryFile( suffix = suffix, delete = False )
+def mktemp( suffix = '', dir = None ):
+    tmp = tempfile.NamedTemporaryFile(
+        suffix = suffix, dir = dir, delete = False
+    )
     try:
         tmp.close()
         yield tmp.name
