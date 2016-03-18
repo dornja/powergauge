@@ -233,7 +233,13 @@ with get_cache() as cache:
     infomsg( "found", len( deltas ), "deltas" )
     dd = DDGenome( genprog, builder, deltas )
     if options.search == "delta":
-        deltas = dd.ddmin( deltas )
+        try:
+            deltas = dd.ddmin( deltas )
+        except AssertionError:
+            if dd.test([]) == dd.PASS:
+                raise
+            else:
+                deltas = list()
     else:
         deltas = brute_force( dd, deltas )
     infomsg( "simplified genome:\n   ", *first( deltas ) )
