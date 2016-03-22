@@ -1,9 +1,10 @@
 from contextlib import contextmanager
 import os
-from subprocess import call, check_call
+from subprocess import call, check_call, CalledProcessError
+import sys
 import tempfile
 
-from util import mktemp
+from util import infomsg, mktemp
 
 class Config( dict ):
     def load( self, fname ):
@@ -49,8 +50,14 @@ class GenProgEnv:
                 for fname in keepfiles:
                     if os.path.exists( fname ):
                         os.rename( fname, os.path.join( tmpdir, fname ) )
-                with open( "/dev/null", 'w' ) as fh:
-                    check_call( cmd, stdout = fh, stderr = fh )
+                with mktemp() as log:
+                    try:
+                        with open( log, 'w' ) as fh:
+                            check_call( cmd, stdout = fh, stderr = fh )
+                    except CalledProcessError:
+                        with open( log ) as fh:
+                            infomsg( fh.read(), file = sys.stderr )
+                        raise
                 if os.path.exists( genome_file ):
                     os.remove( genome_file )
 
