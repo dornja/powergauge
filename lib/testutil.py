@@ -1,3 +1,4 @@
+import csv
 from distutils.spawn import find_executable
 from itertools import repeat
 from math import factorial, pi, sqrt
@@ -213,8 +214,16 @@ class ParallelTest:
             help = "do not limit run time of tested command"
         )
         group.add_option(
+            "-r", "--repeat", metavar = "N", type = int, default = 1,
+            help = "number of times to repeat the test"
+        )
+        group.add_option(
             "--verbose", action = "store_true",
             help = "show commands that are executed"
+        )
+        group.add_option(
+            "--wall", action = "store_true",
+            help = "measure the energy at the wall instead of estimating"
         )
         parser.add_option_group( group )
 
@@ -230,9 +239,16 @@ class ParallelTest:
                     prefix = [ "setarch", platform.machine(), "-R" ]
                     if not self.options.no_limit:
                         prefix += [ os.path.join( root, "bin", "limit" ) ]
+                    if self.options.wall:
+                        prefix += [
+                            os.path.join( root, "bin", "wu.py" ),
+                            "ttyUSB0"
+                        ]
+                    else:
+                        prefix.append( os.path.join( root, "bin", "est-energy.py" ) )
                     prefix += [
-                        os.path.join( root, "bin", "est-energy.py" ), "-o", tmpfit,
-                        "--"
+                        "-o", tmpfit,
+                        "-r", str( self.options.repeat ), "--"
                     ]
                     Multitmp.check_call( prefix + cmd, **kw )
 
@@ -240,7 +256,14 @@ class ParallelTest:
                 if self.validateCorrectness( output ):
                     for fname in tmpfit:
                         with open( fname ) as fh:
-                            fitness = map( float, next( fh ).split() )
+                            if self.options.wall:
+                                reader = csv.DictReader( fh )
+                                row = next( reader )
+                                seconds = float( row[ "time" ] )
+                                watts   = float( row[ "watts" ] )
+                                fitness = [ seconds * watts ]
+                            else:
+                                fitness = map( float, next( fh ).split() )
                             fitness = map( lambda x: 1.0 / ( 1.0 + x ), fitness )
                             results.append( list( fitness ) )
         return results

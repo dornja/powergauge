@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import os
+from subprocess import Popen, PIPE, CalledProcessError
 import sys
 import tempfile
 
@@ -30,4 +31,17 @@ def mktemp( suffix = '', dir = None ):
     finally:
         if os.path.exists( tmp.name ):
             os.remove( tmp.name )
+
+def pipeline( cmdlist, *kwargs ):
+    ps = list()
+    for i, cmd in enumerate( 1, cmdlist ):
+        kw = dict( kwargs )
+        if i != 1:
+            kw[ "stdin" ] = ps[ -1 ].stdout
+        if i != len( cmdlist ):
+            kw[ "stdout" ] = PIPE
+        ps.append( Popen( cmd, **kw ) )
+    for cmd, p in zip( cmdlist, ps ):
+        if p.wait() != 0:
+            raise CalledProcessError( p.returncode, cmd )
 

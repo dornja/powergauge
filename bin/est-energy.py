@@ -25,6 +25,10 @@ parser.add_option(
     default = os.path.join( root, "etc", "energy-models.csv" ),
     help = "CSV file containing coefficients for the power model"
 )
+parser.add_option(
+    "-r", "--repeat", metavar = "N", type = int, default = 1,
+    help = "number of times to repeat program"
+)
 options, args = parser.parse_args()
 
 @contextmanager
@@ -49,6 +53,8 @@ def collect_counters( counters, cmd, stdout = sys.stdout, stderr = sys.stderr):
                 perf = [ "perf", "stat", "-o", datfile ]
                 if len( remaining ) > 0:
                     perf += [ "-e", ",".join( remaining ) ]
+                if options.repeat > 0:
+                    perf += [ "--repeat", str( options.repeat ) ]
                 perf += [ "--" ]
                 try:
                     check_call( perf + cmd, stdout = stdout, stderr = stderr )
