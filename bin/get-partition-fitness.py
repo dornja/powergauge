@@ -54,9 +54,10 @@ if len( args ) < 2:
 
 genprog = args[ 0 ]
 config  = args[ 1 ]
+datadir = "partitions"
 
 def get_localization_files():
-    files = glob( options.localization + ".*" )
+    files = glob( os.path.join( datadir, options.localization + ".*" ) )
     if len( files ) == 0:
         if options.pin_root is None:
             if "PIN_ROOT" in os.environ:
@@ -70,11 +71,11 @@ def get_localization_files():
 
         check_call( [
             os.path.join( root, "bin", "partition-func-localization.py" ),
-                "--output", options.localization,
+                "--output", os.path.join( datadir, options.localization ),
                 "--num", str( options.partitions ),
                 "--pin-root", options.pin_root,
                 "--source", options.source,
-                configfile
+                config
         ] )
         files = glob( options.localization + ".*" )
     if len( files ) != options.partitions:
@@ -86,7 +87,7 @@ def get_localization_files():
     return sorted( files )
 
 def get_storage_dir( index ):
-    return "hold.genome.%d%s" % ( options.max_evals, index )
+    return os.path.join( datadir, "hold.genome.%d%s" % ( options.max_evals, index ) )
 
 def get_genome_file( storage, index ):
     return  os.path.join( storage, "genome.%d%s" % ( options.max_evals, index ) )
@@ -226,14 +227,34 @@ if not os.path.exists( config ):
     infomsg( "no configuration found", file = sys.stderr )
     exit( 1 )
 
-genome_files = list()
 fitness = OrderedDict()
+
+########
+# Compute baseline fitness
+########
+
+if not os.path.isdir( get_storage_dir( ".original" ) ):
+    os.makedirs( get_storage_dir( ".original" ) )
+original = get_genome_file( get_storage_dir( ".original" ), ".original" )
+with open( original, 'w' ) as out:
+    pass
+fitness[ "original" ] = get_minimized_fitness( original )
+
+########
+# Compute, search, and minimize partitions
+########
+
+genome_files = list()
 for fname in get_localization_files():
     index = os.path.splitext( fname )[ 1 ]
     log = get_localized_results( fname, index )
     genome = get_unminimized_genome( log, index )
     genome_files.append( genome )
     fitness[ "set " + index.strip( "." ) ] = get_minimized_fitness( genome )
+
+########
+# Combine unminimized partitioned genomes and minimize combination
+########
 
 if not os.path.isdir( get_storage_dir( ".combined" ) ):
     os.makedirs( get_storage_dir( ".combined" ) )
@@ -245,10 +266,18 @@ with open( combined, 'w' ) as out:
                 infomsg( line, file = out )
 fitness[ "combined" ] = get_minimized_fitness( combined )
 
+########
+# Search and minimize whole program
+########
+
 options.max_evals *= 2
 log = get_localized_results( None, "" )
 genome = get_unminimized_genome( log, "" )
 fitness[ "GOA" ] = get_minimized_fitness( genome )
+
+########
+# Write results to a CSV file
+########
 
 if options.csv is None:
     fh = sys.stdout
