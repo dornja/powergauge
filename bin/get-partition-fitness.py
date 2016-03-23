@@ -148,15 +148,15 @@ def get_unminimized_genome( logfile, index ):
     if not os.path.exists( genome ):
         with open( genome, 'w' ) as fh:
             cmds = list()
-            cmd.append( [
+            cmds.append( [
                 os.path.join( root, "bin", "parse-genprog-log.py" ),
                     os.path.join( storage, "repair.debug.0" ),
                     "--filter", "steps",
                     "--csv", "/dev/stdout"
             ] )
-            cmd.append( [ "tail", "-n", "1" ] )
-            cmd.append( [ "cut", '-d"', "-f2" ], stdout = fh )
-            pipeline( cmd )
+            cmds.append( [ "tail", "-n", "1" ] )
+            cmds.append( [ "cut", '-d"', "-f2" ] )
+            pipeline( cmds, stdout = fh )
 
     return genome
 

@@ -32,9 +32,9 @@ def mktemp( suffix = '', dir = None ):
         if os.path.exists( tmp.name ):
             os.remove( tmp.name )
 
-def pipeline( cmdlist, *kwargs ):
+def pipeline( cmdlist, **kwargs ):
     ps = list()
-    for i, cmd in enumerate( 1, cmdlist ):
+    for i, cmd in enumerate( cmdlist, 1 ):
         kw = dict( kwargs )
         if i != 1:
             kw[ "stdin" ] = ps[ -1 ].stdout
