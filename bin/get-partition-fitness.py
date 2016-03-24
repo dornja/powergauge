@@ -77,7 +77,7 @@ def get_localization_files():
                 "--source", options.source,
                 config
         ] )
-        files = glob( options.localization + ".*" )
+        files = glob( os.path.join( datadir, options.localization + ".*" ) )
     if len( files ) != options.partitions:
         infomsg(
             "ERROR: expected", options.partitions, "partitions, but got",
@@ -144,7 +144,7 @@ def get_localized_results( localfile, index ):
 
 def get_unminimized_genome( logfile, index ):
     storage = os.path.dirname( logfile )
-    genome = get_genome_file( storage, index )
+    genome = get_genome_file( storage, index + ".raw" )
 
     if not os.path.exists( genome ):
         with open( genome, 'w' ) as fh:
@@ -160,6 +160,16 @@ def get_unminimized_genome( logfile, index ):
             pipeline( cmds, stdout = fh )
 
     return genome
+
+def get_maximal_genome( genome ):
+    max_genome = os.path.splitext( genome )[ 0 ]
+    if not os.path.exists( max_genome ):
+        check_call( [
+            os.path.join( root, "bin", "maximize.py" ), genprog, config,
+                "--genome-file", genome,
+                "--save-genome", max_genome
+        ] )
+    return max_genome
 
 def get_minimized_fitness( genome ):
     cmd = [
@@ -250,6 +260,7 @@ for fname in get_localization_files():
     log = get_localized_results( fname, index )
     genome = get_unminimized_genome( log, index )
     genome_files.append( genome )
+    genome = get_maximal_genome( genome )
     fitness[ "set " + index.strip( "." ) ] = get_minimized_fitness( genome )
 
 ########
@@ -258,12 +269,13 @@ for fname in get_localization_files():
 
 if not os.path.isdir( get_storage_dir( ".combined" ) ):
     os.makedirs( get_storage_dir( ".combined" ) )
-combined = get_genome_file( get_storage_dir( ".combined" ), ".combined" )
+combined = get_genome_file( get_storage_dir( ".combined" ), ".combined.raw" )
 with open( combined, 'w' ) as out:
     for genome in genome_files:
         with open( genome ) as fh:
             for line in fh:
                 infomsg( line, file = out )
+combined = get_maximal_genome( combined )
 fitness[ "combined" ] = get_minimized_fitness( combined )
 
 ########
@@ -273,6 +285,7 @@ fitness[ "combined" ] = get_minimized_fitness( combined )
 options.max_evals *= 2
 log = get_localized_results( None, "" )
 genome = get_unminimized_genome( log, "" )
+genome = get_maximal_genome( genome )
 fitness[ "GOA" ] = get_minimized_fitness( genome )
 
 ########

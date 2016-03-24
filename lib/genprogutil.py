@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import os
+import re
 from subprocess import call, check_call, CalledProcessError
 import sys
 import tempfile
@@ -81,4 +82,29 @@ class GenProgEnv:
             call( [ "sh", "-c", tmp ] )
             with open( fitnessfile ) as fh:
                 return map( float, fh.next().split() )
+
+def lower_genome( genes ):
+    fields = re.compile( r'[a-z]\((\d+),(\d+)\)' )
+    pending = list( reversed( genes ) )
+    genes = list()
+    while len( pending ) > 0:
+        gene = pending.pop()
+        if 'a' == gene[ 0 ]:
+            genes.append( gene )
+        elif 'd' == gene[ 0 ]:
+            genes.append( gene )
+        elif 'r' == gene[ 0 ]:
+            m = fields.match( gene )
+            dst, src = m.group( 1, 2 )
+            pending += [ 'd(%s)' % dst, 'a(%s,%s)' % ( dst, src ) ]
+        elif 's' == gene[ 0 ]:
+            m = fields.match( gene )
+            dst, src = m.group( 1, 2 )
+            pending += [
+                'r(%s,%s)' % ( dst, src ),
+                'r(%s,%s)' % ( src, dst )
+            ]
+        else:
+            raise ValueError( "unrecognized gene: " + gene )
+    return genes
 

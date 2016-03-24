@@ -5,7 +5,6 @@ from difflib import SequenceMatcher
 import numpy
 from optparse import OptionParser
 import os
-import re
 import shelve
 from scipy.stats import mannwhitneyu
 import shutil
@@ -16,7 +15,7 @@ import tempfile
 root = os.path.dirname( os.path.dirname( os.path.abspath( sys.argv[ 0 ] ) ) )
 sys.path.append( os.path.join( root, "lib" ) )
 from DD import DD
-from genprogutil import GenProgEnv
+from genprogutil import GenProgEnv, lower_genome
 from testutil import reduce_error
 from util import infomsg, mktemp
 
@@ -183,29 +182,11 @@ def brute_force( dd, deltas ):
 def get_builder( deltas ):
     if options.sources is None:
         if not options.compound_edits:
-            fieldpat = re.compile( r'[a-z]\((\d+),(\d+)\)' )
-            pending = list( reversed( deltas ) )
-            deltas = list()
-            while len( pending ) > 0:
-                gene = pending.pop()
-                if gene[ 0 ] == 'a':
-                    deltas.append( gene )
-                elif gene[ 0 ] == 'd':
-                    deltas.append( gene )
-                elif gene[ 0 ] == 'r':
-                    m = fieldpat.match( gene )
-                    dst, src = m.group( 1, 2 )
-                    pending += [ 'd(%s)' % dst, 'a(%s,%s)' % ( dst, src ) ]
-                elif gene[ 0 ] == 's':
-                    m = fieldpat.match( gene )
-                    dst, src = m.group( 1, 2 )
-                    pending += [
-                        'r(%s,%s)' % ( dst, src ),
-                        'r(%s,%s)' % ( src, dst )
-                    ]
-                else:
-                    infomsg( "ERROR: unrecognized gene:", gene )
-                    exit( 1 )
+            try:
+                deltas = lower_genome( deltas )
+            except ValueError as e:
+                infomsg( "ERROR:", e.message, file = sys.stderr )
+                exit( 1 )
         deltas = list( enumerate( deltas ) )
         builder = GenomeBuilder( genprog )
     else:
