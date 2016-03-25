@@ -97,12 +97,18 @@ class GenomeBuilder:
     def __init__( self, genprog ):
         self.genprog = genprog
 
+    @contextmanager
     def build( self, genome ):
         if len( genome ) == 0:
             infomsg( "INFO: genome: original" )
         else:
             infomsg( "INFO: genome:", *first( genome ) )
-        return self.genprog.build_variant( first( genome ) )
+        try:
+            with self.genprog.build_variant( first( genome ) ) as exe:
+                yield exe
+        except CalledProcessError as e:
+            infomsg( "ERROR:", e )
+            yield None
 
     def key( self, genome ):
         return " ".join( first( genome ) )
@@ -144,20 +150,16 @@ class DDGenome( DD ):
         # "Passing" behavior is more like the original (slower, more energy).
         # "Failing" behavior is more optimized (faster, less energy).
 
-        try:
-            fitness = self.get_fitness( deltas )
-            if len( fitness ) == 0:
-                return self.UNRESOLVED
-            if any( map( lambda f: f == 0, fitness ) ):
-                return self.UNRESOLVED
-            pval = mannwhitneyu( self.optimized, fitness )[ 1 ]
-            if pval < options.alpha and numpy.mean( fitness ) < self.mean:
-                return self.PASS
-            else:
-                return self.FAIL
-        except CalledProcessError as e:
-            infomsg( "ERROR:", e )
+        fitness = self.get_fitness( deltas )
+        if len( fitness ) == 0:
             return self.UNRESOLVED
+        if any( map( lambda f: f == 0, fitness ) ):
+            return self.UNRESOLVED
+        pval = mannwhitneyu( self.optimized, fitness )[ 1 ]
+        if pval < options.alpha and numpy.mean( fitness ) < self.mean:
+            return self.PASS
+        else:
+            return self.FAIL
 
 ########
 # 
