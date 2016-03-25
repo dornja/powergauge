@@ -6,7 +6,7 @@ import sys
 import tempfile
 import time
 
-def infomsg( arg1, *args, **kwargs ):
+def infomsg( *args, **kwargs ):
     fh = kwargs.pop( "file", sys.stdout )
     if len( kwargs ) > 0:
         raise TypeError(
@@ -14,7 +14,7 @@ def infomsg( arg1, *args, **kwargs ):
             kwargs.keys()[ 0 ]
         )
 
-    args = " ".join( map( str, [ arg1 ] + list( args ) ) )
+    args = " ".join( map( str, list( args ) ) )
     fh.write( args )
     fh.write( '\n' )
     fh.flush()

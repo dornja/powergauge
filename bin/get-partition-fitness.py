@@ -172,18 +172,17 @@ def get_maximal_genome( genome ):
     return max_genome
 
 def get_minimized_fitness( genome ):
-    cmd = [
-        os.path.join( root, "bin", "minimize.py" ), genprog, config,
-            "--genome-file", genome,
-            "--cache", genome + ".cache",
-    ]
-
     infomsg( "getting minimized genome for", genome )
 
-    if not os.path.exists( genome + ".cache" ) or \
-            not os.path.exists( genome + ".bin" ):
-        with record.context( "minimize.py" ):
-            check_call( cmd + [ "--save-binary", genome + ".bin" ] )
+    if not os.path.exists( genome + ".min" ):
+        record.time( "minimize.py", check_call, [
+            os.path.join( root, "bin", "minimize.py" ), genprog, config,
+                "--genome-file", genome,
+                "--cache", genome + ".cache",
+                "--save-binary", genome + ".bin",
+                "--save-source", genome + ".src",
+                "--save-genome", genome + ".min"
+        ] )
 
     if options.regenerate is not None:
         cfg = Config()
@@ -216,22 +215,9 @@ def get_minimized_fitness( genome ):
                             exit( 2 )
             return fitnesses
     else:
-        with record.context( "minimize.py" ):
-            p = Popen( cmd, stdout = PIPE )
-            lines = p.communicate()[ 0 ]
-            if p.returncode != 0:
-                raise CalledProcessError( p.returncode, cmd )
-
-        lines = iter( lines.splitlines() )
-        for line in lines:
-            if line.startswith( "simplified genome:" ):
-                break
-        else:
-            infomsg( "ERROR: could not recognize minimized genome" )
-            exit( 2 )
-        for line in lines:
-            key = line.strip()
-            break
+        with open( genome + ".min" ) as fh:
+            key = " ".join( fh.readlines() )
+        key = " ".join( key.split() )
 
         d = shelve.open( genome + ".cache" )
         return d[ key ]

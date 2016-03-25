@@ -8,7 +8,7 @@ import os
 import shelve
 from scipy.stats import mannwhitneyu
 import shutil
-from subprocess import call, CalledProcessError
+from subprocess import call, check_call, CalledProcessError
 import sys
 import tempfile
 
@@ -58,6 +58,14 @@ parser.add_option(
 parser.add_option(
     "--save-binary", metavar = "file",
     help = "save the minimized binary to the named file"
+)
+parser.add_option(
+    "--save-genome", metavar = "file",
+    help = "save the minimized edits to the named file"
+)
+parser.add_option(
+    "--save-sources", metavar = "dir",
+    help = "copy the sources with the minimized edits applied to the named dir"
 )
 parser.add_option(
     "--low-error", metavar = "p", type = float, default = 0.01,
@@ -230,8 +238,18 @@ with get_cache() as cache:
     optim = dd.get_fitness( deltas )
     infomsg( "improvement:", 1 - numpy.mean( base ) / numpy.mean( optim ) )
 
-if options.save_binary is not None:
+if options.save_binary is not None or options.save_sources is not None:
     with builder.build( deltas ) as exe:
-        os.rename( exe, options.save_binary )
-    infomsg( "saved binary to", options.save_binary )
+        if options.save_binary:
+            os.rename( exe, options.save_binary )
+            infomsg( "saved binary to", options.save_binary )
+        if options.save_sources:
+            if os.path.exists( exe ):
+                os.remove( exe )
+            check_call( [ "mv", os.path.dirname( exe ), options.save_sources ] )
+            infomsg( "saved sources to", options.save_sources )
+if options.save_genome is not None:
+    with open( options.save_genome, 'w' ) as fh:
+        infomsg( *first( deltas ), file = fh )
+    infomsg( "saved genome to", options.save_genome )
 
