@@ -12,7 +12,7 @@ import sys
 root = os.path.dirname( os.path.dirname( os.path.abspath( sys.argv[ 0 ] ) ) )
 sys.path.append( os.path.join( root, "lib" ) )
 from genprogutil import Config
-from util import infomsg, mktemp, pipeline
+from util import infomsg, mktemp, pipeline, stats
 
 parser = OptionParser( usage = "%prog [options] genprog configuration" )
 parser.add_option(
@@ -69,7 +69,7 @@ def get_localization_files():
                 )
                 exit( 2 )
 
-        check_call( [
+        record.time( "partitioning", check_call, [
             os.path.join( root, "bin", "partition-func-localization.py" ),
                 "--output", os.path.join( datadir, options.localization ),
                 "--num", str( options.partitions ),
@@ -121,7 +121,7 @@ def get_localized_results( localfile, index ):
                 "--fault-scheme", "line",
                 "--fault-file", localfile,
             ]
-        check_call( cmd )
+        record.time( "GenProg", check_call, cmd )
 
     def get_repair_log( d ):
         if "--seed" in cfg:
@@ -157,14 +157,14 @@ def get_unminimized_genome( logfile, index ):
             ] )
             cmds.append( [ "tail", "-n", "1" ] )
             cmds.append( [ "cut", '-d"', "-f2" ] )
-            pipeline( cmds, stdout = fh )
+            record.time( "parsing logs", pipeline, cmds, stdout = fh )
 
     return genome
 
 def get_maximal_genome( genome ):
     max_genome = os.path.splitext( genome )[ 0 ]
     if not os.path.exists( max_genome ):
-        check_call( [
+        record.time( "maximize.py", check_call, [
             os.path.join( root, "bin", "maximize.py" ), genprog, config,
                 "--genome-file", genome,
                 "--save-genome", max_genome
@@ -182,7 +182,8 @@ def get_minimized_fitness( genome ):
 
     if not os.path.exists( genome + ".cache" ) or \
             not os.path.exists( genome + ".bin" ):
-        check_call( cmd + [ "--save-binary", genome + ".bin" ] )
+        with record.context( "minimize.py" ):
+            check_call( cmd + [ "--save-binary", genome + ".bin" ] )
 
     if options.regenerate is not None:
         cfg = Config()
@@ -192,32 +193,34 @@ def get_minimized_fitness( genome ):
         if options.regenerate == "wall":
             cmd += " -j 1 --wall --repeat 100 --no-limit"
 
-        fitnesses = list()
-        for i in range( options.rows ):
-            with mktemp() as fitnessfile:
-                # use call instead of check_call because test scripts always
-                # return non-zero status
+        with record.context( "fitness eval" ):
+            fitnesses = list()
+            for i in range( options.rows ):
+                with mktemp() as fitnessfile:
+                    # use call instead of check_call because test scripts always
+                    # return non-zero status
 
-                tmp = cmd.replace( "__FITNESS_FILE__", fitnessfile )
-                call( [ "sh", "-c", tmp ] )
-                with open( fitnessfile ) as fh:
-                    for line in fh:
-                        value = float( line.split()[ 0 ] )
-                        infomsg( "   ", value )
-                        fitnesses.append( value )
-                        break
-                    else:
-                        infomsg(
-                            "ERROR: no fitness for", genome + ".bin",
-                            file = sys.stderr
-                        )
-                        exit( 2 )
-        return fitnesses
+                    tmp = cmd.replace( "__FITNESS_FILE__", fitnessfile )
+                    call( [ "sh", "-c", tmp ] )
+                    with open( fitnessfile ) as fh:
+                        for line in fh:
+                            value = float( line.split()[ 0 ] )
+                            infomsg( "   ", value )
+                            fitnesses.append( value )
+                            break
+                        else:
+                            infomsg(
+                                "ERROR: no fitness for", genome + ".bin",
+                                file = sys.stderr
+                            )
+                            exit( 2 )
+            return fitnesses
     else:
-        p = Popen( cmd, stdout = PIPE )
-        lines = p.communicate()[ 0 ]
-        if p.returncode != 0:
-            raise CalledProcessError( p.returncode, cmd )
+        with record.context( "minimize.py" ):
+            p = Popen( cmd, stdout = PIPE )
+            lines = p.communicate()[ 0 ]
+            if p.returncode != 0:
+                raise CalledProcessError( p.returncode, cmd )
 
         lines = iter( lines.splitlines() )
         for line in lines:
@@ -239,54 +242,55 @@ if not os.path.exists( config ):
 
 fitness = OrderedDict()
 
-########
-# Compute baseline fitness
-########
+with stats() as record:
+    ########
+    # Compute baseline fitness
+    ########
 
-if not os.path.isdir( get_storage_dir( ".original" ) ):
-    os.makedirs( get_storage_dir( ".original" ) )
-original = get_genome_file( get_storage_dir( ".original" ), ".original" )
-with open( original, 'w' ) as out:
-    pass
-fitness[ "original" ] = get_minimized_fitness( original )
+    if not os.path.isdir( get_storage_dir( ".original" ) ):
+        os.makedirs( get_storage_dir( ".original" ) )
+    original = get_genome_file( get_storage_dir( ".original" ), ".original" )
+    with open( original, 'w' ) as out:
+        pass
+    fitness[ "original" ] = get_minimized_fitness( original )
 
-########
-# Compute, search, and minimize partitions
-########
+    ########
+    # Compute, search, and minimize partitions
+    ########
 
-genome_files = list()
-for fname in get_localization_files():
-    index = os.path.splitext( fname )[ 1 ]
-    log = get_localized_results( fname, index )
-    genome = get_unminimized_genome( log, index )
-    genome_files.append( genome )
+    genome_files = list()
+    for fname in get_localization_files():
+        index = os.path.splitext( fname )[ 1 ]
+        log = get_localized_results( fname, index )
+        genome = get_unminimized_genome( log, index )
+        genome_files.append( genome )
+        genome = get_maximal_genome( genome )
+        fitness[ "set " + index.strip( "." ) ] = get_minimized_fitness( genome )
+
+    ########
+    # Combine unminimized partitioned genomes and minimize combination
+    ########
+
+    if not os.path.isdir( get_storage_dir( ".combined" ) ):
+        os.makedirs( get_storage_dir( ".combined" ) )
+    combined = get_genome_file( get_storage_dir( ".combined" ), ".combined.raw" )
+    with open( combined, 'w' ) as out:
+        for genome in genome_files:
+            with open( genome ) as fh:
+                for line in fh:
+                    infomsg( line, file = out )
+    combined = get_maximal_genome( combined )
+    fitness[ "combined" ] = get_minimized_fitness( combined )
+
+    ########
+    # Search and minimize whole program
+    ########
+
+    options.max_evals *= 2
+    log = get_localized_results( None, "" )
+    genome = get_unminimized_genome( log, "" )
     genome = get_maximal_genome( genome )
-    fitness[ "set " + index.strip( "." ) ] = get_minimized_fitness( genome )
-
-########
-# Combine unminimized partitioned genomes and minimize combination
-########
-
-if not os.path.isdir( get_storage_dir( ".combined" ) ):
-    os.makedirs( get_storage_dir( ".combined" ) )
-combined = get_genome_file( get_storage_dir( ".combined" ), ".combined.raw" )
-with open( combined, 'w' ) as out:
-    for genome in genome_files:
-        with open( genome ) as fh:
-            for line in fh:
-                infomsg( line, file = out )
-combined = get_maximal_genome( combined )
-fitness[ "combined" ] = get_minimized_fitness( combined )
-
-########
-# Search and minimize whole program
-########
-
-options.max_evals *= 2
-log = get_localized_results( None, "" )
-genome = get_unminimized_genome( log, "" )
-genome = get_maximal_genome( genome )
-fitness[ "GOA" ] = get_minimized_fitness( genome )
+    fitness[ "GOA" ] = get_minimized_fitness( genome )
 
 ########
 # Write results to a CSV file

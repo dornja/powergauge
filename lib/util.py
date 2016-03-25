@@ -1,8 +1,10 @@
+from collections import defaultdict
 from contextlib import contextmanager
 import os
 from subprocess import Popen, PIPE, CalledProcessError
 import sys
 import tempfile
+import time
 
 def infomsg( arg1, *args, **kwargs ):
     fh = kwargs.pop( "file", sys.stdout )
@@ -44,4 +46,64 @@ def pipeline( cmdlist, **kwargs ):
     for cmd, p in zip( cmdlist, ps ):
         if p.wait() != 0:
             raise CalledProcessError( p.returncode, cmd )
+
+class stats:
+    def __init__( self ):
+        self.counts = defaultdict( lambda: 0 )
+        self.totals = defaultdict( lambda: 0.0 )
+        self.stack  = list()
+        self.start  = time.time()
+
+    @contextmanager
+    def context( self, key ):
+        start = time.time()
+        self.stack.append( 0 )
+        try:
+            yield
+        finally:
+            duration = time.time() - start
+            holes = self.stack.pop()
+            if len( self.stack ) > 0:
+                self.stack[ -1 ] += duration
+            self.totals[ key ] += duration - holes
+            self.counts[ key ] += 1
+
+    def time( self, key, f, *args, **kwargs ):
+        with self.context( key ):
+            return f( *args, **kwargs )
+
+    def __enter__( self ):
+        return self
+
+    def __exit__( self, typ, val, trace ):
+        duration = time.time() - self.start
+
+        table = list()
+        table.append( [ "Activity", "Count", "Seconds", "Percent" ] )
+        for key in sorted( self.totals ):
+            row = [
+                key,
+                str( self.counts[ key ] ),
+                "%.3f" % self.totals[ key ],
+                "%.2f%%" % ( 100 * self.totals[ key ] / duration )
+            ]
+            table.append( row )
+        table.append( [ "total time", "", "%.3f" % duration, "100.00%" ] )
+
+        widths = list()
+        for row in table:
+            widths += [ 0 ] * ( len( row ) - len( widths ) )
+            widths = map( max, zip( widths, map( len, row ) ) )
+
+        table[ 0 ] = map(
+            lambda (s,w): s + " " * ( w - len( s ) ),
+            zip( table[ 0 ], widths )
+        )
+        table.insert(  1, map( lambda w: "-" * w, widths ) )
+        table.insert( -1, map( lambda w: "-" * w, widths ) )
+
+        fmt = "  ".join( map( "{:>%d}".__mod__, widths ) )
+        fmt = fmt[ :2 ] + "<" + fmt[ 3: ]
+        for row in table:
+            infomsg( fmt.format( *row ), file = sys.stderr )
 
