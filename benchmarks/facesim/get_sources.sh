@@ -9,7 +9,6 @@ CPPFLAGS="
 
 CXXFLAGS="
 -O3
--g
 -funroll-loops
 -fprefetch-loop-arrays
 -fpermissive
