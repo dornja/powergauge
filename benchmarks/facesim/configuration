@@ -1,0 +1,15 @@
+--program multi.txt
+--prefix src
+--sanity no
+--single-fitness
+--pos-tests 1
+--neg-tests 0
+--compiler-command ./compile.sh __SOURCE_NAME__ __EXE_NAME__
+--test-command ./test.py -j 7 __EXE_NAME__ large __FITNESS_FILE__
+--fix-scheme uniform
+--fault-scheme uniform
+--search ssga
+--eviction-strategy tournament
+--popsize 512
+--max-evals 262144
+--seed 0

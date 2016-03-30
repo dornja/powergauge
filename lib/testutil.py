@@ -102,9 +102,12 @@ class Multitmp:
         open_files = list()
         def iopen( iterable ):
             for name in iterable:
-                fh = open( name, 'w' )
-                open_files.append( fh )
-                yield fh
+                if os.path.isdir( name ):
+                    yield name
+                else:
+                    fh = open( name, 'w' )
+                    open_files.append( fh )
+                    yield fh
 
         args = [ get_iter( iter, arg ) for arg in cmd ]
         kw = [ ( k, get_iter( iopen, v ) ) for k, v in kwargs.items() ]
