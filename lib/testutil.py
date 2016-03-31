@@ -171,6 +171,14 @@ class ParallelTest:
                     check_call( [ "cp", "-p", fname, golden ] )
                 new_golden = True
             else:
+                infomsg(
+                    "ERROR: no golden output to compare against",
+                    file = sys.stderr
+                )
+                infomsg(
+                    "ERROR: try running with original program and --create-golden",
+                    file = sys.stderr
+                )
                 raise IOError( 2, "No such file or directory", golden )
 
         try:
@@ -287,7 +295,10 @@ class ParallelTest:
         if "/" not in self.exe:
             self.exe = os.path.join( ".", self.exe )
 
-        results = self.getParallelFitness( root )
+        try:
+            results = self.getParallelFitness( root )
+        except IOError as e:
+            exit( e.errno )
 
         fitness = [ ( 0.0, 0 ) ]
         if len( results ) == self.options.jobs:

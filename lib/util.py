@@ -95,10 +95,7 @@ class stats:
             widths += [ 0 ] * ( len( row ) - len( widths ) )
             widths = map( max, zip( widths, map( len, row ) ) )
 
-        table[ 0 ] = map(
-            lambda (s,w): s + " " * ( w - len( s ) ),
-            zip( table[ 0 ], widths )
-        )
+        table[ 0 ] = [s + " " * (w - len(s)) for s, w in zip(table[0], widths)]
         table.insert(  1, map( lambda w: "-" * w, widths ) )
         table.insert( -1, map( lambda w: "-" * w, widths ) )
 
