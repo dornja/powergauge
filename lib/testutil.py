@@ -59,13 +59,14 @@ def reduce_error( f, alpha, probes = 5 ):
         debug_file = log
 
 class Multitmp:
-    def __init__( self, num ):
+    def __init__( self, num, suffix = "" ):
         self.num = num
+        self.suffix = suffix
 
     def __enter__( self ):
         self.fnames = list()
         for i in range( self.num ):
-            self.fnames.append( mktemp().__enter__() )
+            self.fnames.append( mktemp( self.suffix ).__enter__() )
         return self
 
     def __exit__( self, typ, val, trace ):
@@ -153,8 +154,11 @@ class ParallelTest:
     def getCommand( self, outfile ):
         raise NotImplementedError( "getCommand()" )
 
+    def getOutputSuffix( self ):
+        return ""
+
     def getGolden( self ):
-        return "outputs/%s.txt" % self.size
+        return "outputs/%s%s" % ( self.size, self.getOutputSuffix() )
 
     def validateCorrectness( self, outfile ):
         golden = self.getGolden()
@@ -240,7 +244,7 @@ class ParallelTest:
 
     def getParallelFitness( self, root ):
         with Multitmp( self.options.jobs ) as tmpfit:
-            with Multitmp( self.options.jobs ) as output:
+            with Multitmp( self.options.jobs, self.getOutputSuffix() ) as output:
                 cmd, kw = self.getCommand( output )
                 with open( "/dev/null", 'w' ) as null:
                     kw.setdefault( "stdout", null )

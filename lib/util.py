@@ -23,9 +23,9 @@ def infomsg( *args, **kwargs ):
     except OSError: pass
 
 @contextmanager
-def mktemp( suffix = '', dir = None ):
+def mktemp( suffix = '', prefix = 'tmp', dir = None ):
     tmp = tempfile.NamedTemporaryFile(
-        suffix = suffix, dir = dir, delete = False
+        suffix = suffix, prefix = prefix, dir = dir, delete = False
     )
     try:
         tmp.close()
