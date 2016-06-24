@@ -1,5 +1,7 @@
 // vim: filetype=cpp
 
+#include <EEPROM.h>
+
 // define theoretical vref calibration constant for use in readvcc()
 // 1100mV*1024 ADC steps http://openenergymonitor.org/emon/node/1186
 // override in your code with value for your specific AVR chip
@@ -22,22 +24,29 @@ const byte LEDpin = 6;
 // Number of CT channels we can read
 const byte NUM_CT = 4;
 
+struct calibration_info {
+    float vCal;
+    float iCal[ NUM_CT ];
+    float pCal[ NUM_CT ];
+};
+
+float phi;
+
+calibration_info cal;
+boolean calibration_mode = false;
+
 unsigned long lastpost = 0;
 unsigned long period = 500;
 unsigned long samples = 0;
 
-String command;
+String buffer;
 
-float vCal;
-float phaseCal;
 float offsetV  = ADC_COUNTS >> 1;
-float filteredV, sqV;
+float V, Vsq;
 
-float iCal[ NUM_CT ];
-int sampleI[ NUM_CT ];
 float offsetI[ NUM_CT ];
-float sqI[ NUM_CT ];
-float instP[ NUM_CT ];
+float Isq[ NUM_CT ];
+float Pinst[ NUM_CT ];
 
 long readVcc();
 
@@ -47,22 +56,12 @@ setup()
     pinMode( LEDpin, HIGH );
     digitalWrite( LEDpin, HIGH );
 
-    Serial.begin( 9600 );
-    Serial.println( "emonTx V3" );
+    Serial.begin( 115200 );
 
     // Initialize calibration factors.
 
-    //vCal      = 276.9;
-    //iCal[ 0 ] =  90.9;
-    //iCal[ 1 ] =  90.9;
-    //iCal[ 4 ] =  16.6;
-    //phaseCal  =   1.7;
-    vCal      = 126.324;
-    iCal[ 0 ] =  92.36;
-    iCal[ 1 ] =  90.9;
-    iCal[ 2 ] =  80.953;
-    iCal[ 3 ] =  15.350;
-    phaseCal  =   1.319;
+    EEPROM.get( 0, cal );
+    phi = cal.vCal * cal.iCal[ 3 ];
 
     lastpost = 0;
 
@@ -70,37 +69,143 @@ setup()
 }
 
 void
-reset()
+menu()
 {
-    samples = 0;
-    sqV = 0.0;
-    for ( char i = 0; i < NUM_CT; ++i ) {
-        sqI[ i ]   = 0.0;
-        instP[ i ] = 0.0;
-    }
-}
-
-void
-updateCalibration()
-{
-    command += Serial.readString();
-    if ( command.indexOf( ';' ) == -1 )
+    buffer += Serial.readString();
+    if ( buffer.indexOf( ';' ) == -1 )
         return;
 
-    char pivot = command.indexOf( ';' );
+    unsigned long user_delay = 2000;
+    char pivot = buffer.indexOf( ';' );
     while ( pivot > -1 ) {
-        switch ( command.charAt( 0 ) ) {
-            case 'p':
-                period = command.substring( 2, pivot ).toInt();
-                break;
+        while ( pivot > -1 ) {
+            boolean valid = true;
+            String command = buffer.substring( 0, pivot );
+            if ( command.startsWith( F( "delay " ) ) ) {
+                user_delay = command.substring( 6 ).toInt();
+            } else if ( command == F( "get Vcc" ) ) {
+                Serial.print( F( "ANS: " ) );
+                Serial.print( readVcc() );
+                Serial.print( F( "\r\n" ) );
+            } else if ( command == F( "get ADC_BITS" ) ) {
+                Serial.print( F( "ANS: " ) );
+                Serial.print( ADC_BITS );
+                Serial.print( F( "\r\n" ) );
+            } else if ( command == F( "get vCal" ) ) {
+                Serial.print( F( "ANS: " ) );
+                Serial.print( cal.vCal );
+                Serial.print( F( "\r\n" ) );
+            } else if ( command.startsWith( F( "get iCal " ) ) ) {
+                char idx = command.substring( 9 ).toInt();
+                if ( 0 < idx && idx <= 4 ) {
+                    Serial.print( F( "ANS: " ) );
+                    Serial.print( cal.iCal[ idx - 1 ] );
+                    Serial.print( F( "\r\n" ) );
+                } else {
+                    valid = false;
+                }
+            } else if ( command.startsWith( F( "get pCal " ) ) ) {
+                char idx = command.substring( 9 ).toInt();
+                if ( 0 < idx && NUM_CT ) {
+                    Serial.print( F( "ANS: " ) );
+                    Serial.print( cal.pCal[ idx - 1 ] );
+                    Serial.print( F( "\r\n" ) );
+                } else {
+                    valid = false;
+                }
+            } else if ( command == F( "get period" ) ) {
+                Serial.print( F( "ANS: " ) );
+                Serial.print( period );
+                Serial.print( F( "\r\n" ) );
+            } else if ( command.startsWith( F( "set calibrate " ) ) ) {
+                calibration_mode = command.substring( 14 ).toInt();
+            } else if ( command.startsWith( F( "set vCal " ) ) ) {
+                float value = command.substring( 9 ).toFloat();
+                if ( value != 0.0f ) {
+                    cal.vCal = value;
+                    EEPROM.put( 0, cal );
+                }
+            } else if ( command.startsWith( F( "set iCal " ) ) ) {
+                char space = command.indexOf( ' ', 9 );
+                int idx = command.substring( 9, space ).toInt();
+                if ( 0 < idx && idx <= 4 ) {
+                    float value = command.substring( space + 1 ).toFloat();
+                    if ( value != 0.0f ) {
+                        cal.iCal[ idx - 1 ] = value;
+                        EEPROM.put( 0, cal );
+                    }
+                } else {
+                    valid = false;
+                }
+            } else if ( command.startsWith( F( "set pCal " ) ) ) {
+                char space = command.indexOf( ' ', 9 );
+                int idx = command.substring( 9, space ).toInt();
+                if ( 0 < idx && idx <= 4 ) {
+                    float value = command.substring( space + 1 ).toFloat();
+                    if ( value != 0.0f ) {
+                        cal.pCal[ idx - 1 ] = value;
+                        EEPROM.put( 0, cal );
+                    }
+                } else {
+                    valid = false;
+                }
+            } else if ( command.startsWith( F( "set period " ) ) ) {
+                unsigned long value = command.substring( 11 ).toInt();
+                if ( value != 0 )
+                    period = value;
+                else {
+                    Serial.print( F( "ERROR: " ) );
+                    Serial.print( command.substring( 13 ) );
+                    Serial.print( F( " parse to " ) );
+                    Serial.print( value );
+                    Serial.print( F( "\r\n" ) );
+                }
+            } else {
+                valid = false;
+            }
+            if ( !valid ) {
+                Serial.print( F( "Available commands:\r\n" ) );
+                Serial.print( F( "  delay millis\r\n" ) );
+                Serial.print( F( "  get ADC_BITS\r\n" ) );
+                Serial.print( F( "  get Vcc\r\n" ) );
+                Serial.print( F( "  get iCal [1-4]\r\n" ) );
+                Serial.print( F( "  get pCal [1-4]\r\n" ) );
+                Serial.print( F( "  get period\r\n" ) );
+                Serial.print( F( "  get vCal\r\n" ) );
+                Serial.print( F( "  set calibrate 0|1\r\n" ) );
+                Serial.print( F( "  set iCal [1-4] value\r\n" ) );
+                Serial.print( F( "  set pCal [1-4] value\r\n" ) );
+                Serial.print( F( "  set period value\r\n" ) );
+                Serial.print( F( "  set vCal value\r\n" ) );
+            }
+            buffer.remove( 0, pivot + 1 );
+            if ( Serial.available() )
+                buffer += Serial.readString();
+            pivot = buffer.indexOf( ';' );
         }
-        command.remove( 0, pivot + 1 );
-        pivot = command.indexOf( ';' );
+
+        long end = millis() + user_delay;
+        while ( millis() < end )
+            if ( Serial.available() )
+                buffer += Serial.readString();
+        pivot = buffer.indexOf( ';' );
     }
-    lastpost = millis();
-    reset();
+
+    samples = 0;
+    Vsq = 0.0;
+    for ( char i = 0; i < NUM_CT; ++i ) {
+        Isq[ i ]   = 0.0;
+        Pinst[ i ] = 0.0;
+    }
+    // Cause us to report all zeros / nans before resuming. This allows
+    // whatever is reading the output to sync with the changes if necessary.
+    lastpost = millis() - period;
 }
 
+template< boolean Calibrate >
+struct main {
+
+static
 void
 loop()
 {
@@ -108,58 +213,129 @@ loop()
 
     if ( period <= ( millis() - lastpost ) ) {
         lastpost = millis();
-        int supplyV = readVcc();
-        float inv_samples = 1.0 / samples;
+        float supplyV = readVcc() / 1000.0 / ADC_COUNTS;
 
         Serial.print( samples );
         Serial.print( ' ' );
 
-        float vRatio = vCal * supplyV / 1000.0 / ADC_COUNTS;
-        float vRMS = vRatio * sqrt( sqV * inv_samples );
-        Serial.print( vRMS );
-        Serial.print( '|' );
-
-        float tmp = vRatio * inv_samples;
-        for ( char i = 1; i <= NUM_CT; ++i ) {
-            float iRatio = iCal[ i - 1 ] * supplyV / 1000.0 / ADC_COUNTS;
-            float iRMS = iRatio * sqrt( sqI[ i - 1 ] * inv_samples );
-            float power = tmp * iRatio * instP[ i - 1 ];
-            Serial.print( iRMS );
-            Serial.print( ' ' );
-            // real power
-            Serial.print( power );
-            Serial.print( ' ' );
-            // apparent power
-            Serial.print( vRMS * iRMS );
-            Serial.print( '|' );
-            sqI[ i - 1 ]   = 0.0;
-            instP[ i - 1 ] = 0.0;
+        float vRatio = cal.vCal * supplyV;
+        if ( Calibrate ) {
+            float vRMS = vRatio * sqrt( Vsq / samples );
+            Vsq = 0.0;
+            Serial.print( vRMS );
         }
+
+        float tmp, iRatio, iRMS, power;
+
+        tmp = vRatio / samples;
+        iRatio = cal.iCal[ 0 ] * supplyV;
+        if ( Calibrate ) {
+            iRMS = iRatio * sqrt( Isq[ 0 ] / samples );
+            Isq[ 0 ] = 0.0;
+            Serial.print( ' ' );
+            Serial.print( iRMS );
+        }
+        power = tmp * iRatio * Pinst[ 0 ] * cal.pCal[ 0 ];
+        Serial.print( ' ' );
+        Serial.print( power );
+        Pinst[ 0 ] = 0.0;
+
+        iRatio = cal.iCal[ 1 ] * supplyV;
+        if ( Calibrate ) {
+            iRMS = iRatio * sqrt( Isq[ 1 ] / samples );
+            Isq[ 1 ] = 0.0;
+            Serial.print( ' ' );
+            Serial.print( iRMS );
+        }
+        power = tmp * iRatio * Pinst[ 1 ] * cal.pCal[ 1 ];
+        Serial.print( ' ' );
+        Serial.print( power );
+        Pinst[ 1 ] = 0.0;
+
+        iRatio = cal.iCal[ 2 ] * supplyV;
+        if ( Calibrate ) {
+            iRMS = iRatio * sqrt( Isq[ 2 ] / samples );
+            Isq[ 2 ] = 0.0;
+            Serial.print( ' ' );
+            Serial.print( iRMS );
+        }
+        power = tmp * iRatio * Pinst[ 2 ] * cal.pCal[ 2 ];
+        Serial.print( ' ' );
+        Serial.print( power );
+        Pinst[ 2 ] = 0.0;
+
+        iRatio = cal.iCal[ 3 ] * supplyV;
+        if ( Calibrate ) {
+            iRMS = iRatio * sqrt( Isq[ 3 ] / samples );
+            Isq[ 3 ] = 0.0;
+            Serial.print( ' ' );
+            Serial.print( iRMS );
+        }
+        power = tmp * iRatio * Pinst[ 3 ] * cal.pCal[ 3 ];
+        Serial.print( ' ' );
+        Serial.print( power );
+        Pinst[ 3 ] = 0.0;
+
         Serial.print( "\r\n" );
 
         samples = 0;
-        sqV = 0.0;
         //reset();
     }
 
     samples += 1;
-    float lastFilteredV = filteredV;
-    int sampleV = analogRead( 0 );
-    offsetV = offsetV + ( sampleV - offsetV ) / 1024;
-    filteredV = sampleV - offsetV;
-    sqV += filteredV * filteredV;
-    float phaseShiftedV = lastFilteredV + phaseCal * ( filteredV - lastFilteredV );
+    float lastV = V;
+    V = analogRead( 0 );
+    offsetV += ( V - offsetV ) / 1024;
+    V -= offsetV;
+    if ( Calibrate )
+        Vsq += V * V;
 
-    for ( char i = 0; i < NUM_CT; ++i ) {
-        sampleI[ i ] = analogRead( i + 1 );
-        offsetI[ i ] = offsetI[ i ] + ( sampleI[ i ] - offsetI[ i ] ) / 1024;
-        float filteredI = sampleI[ i ] - offsetI[ i ];
-        sqI[ i ] += filteredI * filteredI;
-        instP[ i ] += phaseShiftedV * filteredI;
-    }
+    // unrolling the loop improves performance
 
-    if (Serial.available() > 0)
-        updateCalibration();
+    float I = analogRead( 1 );
+    offsetI[ 0 ] += ( I - offsetI[ 0 ] ) / 1024;
+    I -= offsetI[ 0 ];
+    if ( Calibrate )
+        Isq[ 0 ] += I * I;
+    //Pinst[ 0 ] += Vphase * I;
+    Pinst[ 0 ] += V * I;
+
+    I = analogRead( 2 );
+    offsetI[ 1 ] += ( I - offsetI[ 1 ] ) / 1024;
+    I -= offsetI[ 1 ];
+    if ( Calibrate )
+        Isq[ 1 ] += I * I;
+    //Pinst[ 1 ] += Vphase * I;
+    Pinst[ 1 ] += V * I;
+
+    I = analogRead( 3 );
+    offsetI[ 2 ] += ( I - offsetI[ 2 ] ) / 1024;
+    I -= offsetI[ 2 ];
+    if ( Calibrate )
+        Isq[ 2 ] += I * I;
+    //Pinst[ 2 ] += Vphase * I;
+    Pinst[ 2 ] += V * I;
+
+    I = analogRead( 4 );
+    offsetI[ 3 ] += ( I - offsetI[ 3 ] ) / 1024;
+    I -= offsetI[ 3 ];
+    if ( Calibrate )
+        Isq[ 3 ] += I * I;
+    //Pinst[ 3 ] += Vphase * I;
+    Pinst[ 3 ] += V * I;
+
+    if ( Serial.available() )
+        menu();
+}
+};
+
+void
+loop()
+{
+    if ( calibration_mode )
+        main< true >::loop();
+    else
+        main< false >::loop();
 }
 
 /*
