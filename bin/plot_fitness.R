@@ -92,10 +92,10 @@ for ( i in 2:( length(args) / 2 ) ) {
 }
 
 # If we know the original fitness, rescale to show improvement instead of raw
-# fitness values.
+# fitness values. Also sets the minimum of the fitness axis to 1 (100%)
 
 if ( !is.na( original ) ) {
-    ylim <- ylim / original
+    ylim <- c(1, max(ylim / original))
     for ( name in names( fig ) )
         fig[[ name ]]$y <- fig[[ name ]]$y / original
 }
