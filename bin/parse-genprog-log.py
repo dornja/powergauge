@@ -133,9 +133,15 @@ finally:
 
 if options.csv is None:
     if original is not None:
-        print "original:", original
-    print "best:    ", best
+        print "original fitness:   ", original
+    print "best fitness:       ", best
     if original is not None:
-        print "improvement: %2.4g%%" % ( ( 1 - ( original / best ) ) * 100 )
+        # Convert from fitness to energy
+        orig_energy = ( 1 / original ) - 1
+        best_energy = ( 1 / best ) - 1
+        print "original energy:    ", orig_energy
+        print "best energy:        ", best_energy
+        print "fitness improvement: %2.4g%%" % ( ( 1 - ( original / best ) ) * 100 )
+        print "energy improvement:  %2.4g%%" % ( ( 1 - ( best_energy / orig_energy ) ) * 100 )
     print "variants considered:", numEntries
 
