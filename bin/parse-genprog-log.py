@@ -17,6 +17,9 @@ parser.add_option(
     "--stop-after", metavar = "N", type = int,
     help = "stop after reading the first N variants"
 )
+parser.add_option(
+    "--sort", action="store_true", dest="sort", help = "sort by amount of improvement in fitness. You likely want to include --filter=steps as well"
+)
 options, args = parser.parse_args()
 
 if len( args ) < 1:
@@ -93,7 +96,10 @@ else:
     out = open( options.csv, 'w' )
 try:
     writer = csv.writer( out )
-    writer.writerow( [ "generation", "fitness", "variant" ] )
+    if options.sort:
+        writer.writerow( [ "improvement", "evaluation", "fitness", "variant" ] )
+    else:
+        writer.writerow( [ "generation", "fitness", "variant" ] )
     with open( args[ 0 ] ) as fh:
         source = statsFilter( getEntries( fh ) )
         if options.filter is not None:
@@ -101,6 +107,18 @@ try:
                 source = stepsFilter( source )
             elif options.filter == "regression":
                 source = regressionFilter( source )
+        if options.sort:
+            rows = list(source)
+            prev_best = 0
+            source = []
+            i = 0
+            for row in rows:
+                diff = row[1] - prev_best
+                if row[1] > prev_best:
+                    prev_best = row[1]
+                source.append((diff, i, row[1], row[2]))
+                i += 1
+            source.sort(key=lambda x: x[0])
         for row in source:
             try:
                 writer.writerow( map( str, row ) )
