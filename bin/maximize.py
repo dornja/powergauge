@@ -68,10 +68,11 @@ def swallow( exn, f, *args, **kw ):
         yield obj
 
 class DDGenome( DD ):
-    def __init__( self, genprog ):
+    def __init__( self, genprog, num_edits):
         DD.__init__( self )
         self.genprog = genprog
         self.assume_axioms_hold = False
+        self.num_edits = num_edits
 
     def _dd( self, c, n ):
         assert self.test(c) == self.FAIL
@@ -93,7 +94,10 @@ class DDGenome( DD ):
         with swallow( CalledProcessError, build, genome ) as exe:
             if exe is None:
                 fitness = "compile error"
-                cache[ key ] = self.UNRESOLVED
+                if len( deltas ) == self.num_edits:
+                    cache[ key ] = self.FAIL
+                else:
+                    cache[ key ] = self.UNRESOLVED
             else:
                 try:
                     fitness = self.genprog.run_test( exe )[ 0 ]
@@ -106,7 +110,7 @@ class DDGenome( DD ):
 
 cache = dict()
 infomsg( "found", len( deltas ), "deltas" )
-dd = DDGenome( GenProgEnv( genprog, configfile ) )
+dd = DDGenome( GenProgEnv( genprog, configfile), len( deltas ))
 try:
     to_remove = dd.ddmax( deltas )
 except AssertionError:
