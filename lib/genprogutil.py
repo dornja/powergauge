@@ -81,7 +81,11 @@ class GenProgEnv:
             tmp = cmd.replace( "__FITNESS_FILE__", fitnessfile )
             call( [ "sh", "-c", tmp ] )
             with open( fitnessfile ) as fh:
-                return map( float, fh.next().split() )
+                try:
+                    return map( float, next(fh).split() )
+                except StopIteration:
+                    return [0.0]
+
 
 def lower_genome( genes ):
     fields = re.compile( r'[a-z]\((\d+),(\d+)\)' )
