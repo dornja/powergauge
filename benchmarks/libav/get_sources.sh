@@ -3,7 +3,7 @@
 if [ $# -lt 1 ] ; then
     echo "Usage: $0 libav-dir"
     echo "You can get libav with:"
-    echo "git clone git://git.libav.org/libav.git libav"
+    echo "git clone git://git.libav.org/libav.git libav-src"
     exit
 fi
 
