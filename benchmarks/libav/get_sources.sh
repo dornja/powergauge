@@ -26,7 +26,7 @@ echo "Compiling source"
 ./create_assembly.sh
 ./compile_yasm.sh
 rm create_assembly.sh
-rm compile_yasm
+rm compile_yasm.sh
 cd -
 
 echo "Copying assembly files"
