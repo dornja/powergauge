@@ -1,15 +1,26 @@
 #!/bin/sh
 
-if [ $# -lt 1 ] ; then
-    echo "Usage: $0 libav-dir"
+LIBAV="libav-src"
+SRC="src"
+CURDIR=`pwd`
+
+if [ $# -ne 0 ] ; then
+    echo "$0 takes no arguments. Assumes that get_sources.sh has set up the $LIBAV and $SRC directories"
     exit
 fi
 
-LIBAV="$1"
-CURDIR=`pwd`
+if [ ! -d "$LIBAV" ] ; then
+    echo "$LIBAV folder not found. Did you run get_sources.sh?"
+    exit 1
+fi
+
+if [ ! -d "$SRC" ] ; then
+    echo "$SRC folder not found. Did you run get_sources.sh?"
+    exit 1
+fi
 
 echo "Copying files"
-rsync -ar src/ "$LIBAV"
+rsync -ar "$SRC/" "$LIBAV"
 echo "Compiling"
 cd "$LIBAV"
 pwd

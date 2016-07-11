@@ -1,17 +1,22 @@
 #!/bin/sh
 
-if [ $# -lt 1 ] ; then
-    echo "Usage: $0 libav-dir"
-    echo "You can get libav with:"
-    echo "git clone git://git.libav.org/libav.git libav-src"
+LIBAV="libav-src"
+LIBAV_VERSION="v12_dev0-2969-ga8cbe5a"
+SRC="src"
+
+if [ $# -ne 0 ] ; then
+    echo "Usage: $0"
+    echo "Automatically clones the libav git repository and checks out version $LIBAV_VERSION. The libav repository is in the $LIBAV directory and the compiled assembly files for genprog are in the $SRC directory"
     exit
 fi
 
-LIBAV="$1"
-
-if [ ! -d src ] ; then
-    mkdir src
+if [ ! -d "$LIBAV" ] ; then
+    git clone git://git.libav.org/libav.git "$LIBAV"
+    cd "$LIBAV"
+    git checkout "$LIBAV_VERSION"
+    cd - > /dev/null
 fi
+
 
 cp create_assembly.sh "$LIBAV"
 cd "$LIBAV"
@@ -21,6 +26,10 @@ echo "Running configure"
 # avversion.h needs to be created before compilation
 echo "Creating avversion.h"
 echo '#define LIBAV_VERSION "'`./version.sh`'"' > avversion.h
+
+if [ ! -d "$SRC" ] ; then
+    mkdir "$SRC"
+fi
 
 echo "Compiling source"
 ./create_assembly.sh
