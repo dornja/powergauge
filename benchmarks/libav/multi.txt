@@ -1,22 +1,15 @@
-.
-multi.txt
-doc
 doc/print_options.s
-avconv.s~
-libswscale
 libswscale/output.s
 libswscale/swscale.s
 libswscale/swscale_unscaled.s
 libswscale/yuv2rgb.s
 libswscale/rgb2rgb.s
-libswscale/x86
 libswscale/x86/swscale.s
 libswscale/x86/yuv2rgb.s
 libswscale/x86/rgb2rgb.s
 libswscale/options.s
 libswscale/utils.s
 libswscale/input.s
-libavformat
 libavformat/4xm.s
 libavformat/filmstripdec.s
 libavformat/tcp.s
@@ -333,10 +326,8 @@ libavformat/adxdec.s
 libavformat/dtsdec.s
 libavformat/thp.s
 avplay.s
-libavresample
 libavresample/dither.s
 libavresample/audio_data.s
-libavresample/x86
 libavresample/x86/audio_mix_init.s
 libavresample/x86/audio_convert_init.s
 libavresample/x86/dither_init.s
@@ -347,7 +338,6 @@ libavresample/options.s
 libavresample/utils.s
 libavresample/audio_mix_matrix.s
 avconv_filter.s
-libavcodec
 libavcodec/4xm.s
 libavcodec/h264_direct.s
 libavcodec/flicvideo.s
@@ -426,7 +416,6 @@ libavcodec/g722dsp.s
 libavcodec/aacps.s
 libavcodec/ac3.s
 libavcodec/ffv1enc.s
-libavcodec/mpeg4video.s~
 libavcodec/wmv2dec.s
 libavcodec/assdec.s
 libavcodec/mpegutils.s
@@ -629,7 +618,6 @@ libavcodec/exr.s
 libavcodec/bmp_parser.s
 libavcodec/mpegaudiodsp_fixed.s
 libavcodec/fft_fixed.s
-libavcodec/x86
 libavcodec/x86/qpeldsp_init.s
 libavcodec/x86/h263dsp_init.s
 libavcodec/x86/huffyuvencdsp_mmx.s
@@ -1019,7 +1007,6 @@ libavcodec/lagarithrac.s
 libavcodec/pthread_frame.s
 libavcodec/binkdsp.s
 libavcodec/vp6.s
-libavdevice
 libavdevice/oss_enc.s
 libavdevice/alsa_enc.s
 libavdevice/alsa_dec.s
@@ -1031,7 +1018,6 @@ libavdevice/v4l2.s
 libavdevice/oss_dec.s
 libavdevice/oss.s
 libavdevice/dv1394.s
-libavutil
 libavutil/log2_tab.s
 libavutil/frame.s
 libavutil/audio_fifo.s
@@ -1045,7 +1031,6 @@ libavutil/des.s
 libavutil/fifo.s
 libavutil/blowfish.s
 libavutil/atomic.s
-libavutil/x86
 libavutil/x86/float_dsp_init.s
 libavutil/x86/lls_init.s
 libavutil/x86/cpu.s
@@ -1086,7 +1071,6 @@ libavutil/buffer.s
 cmdutils.s
 avconv_opt.s
 avconv.s
-libavfilter
 libavfilter/vf_transpose.s
 libavfilter/vf_showinfo.s
 libavfilter/buffersrc.s
@@ -1108,7 +1092,6 @@ libavfilter/allfilters.s
 libavfilter/vf_vflip.s
 libavfilter/vf_hflip.s
 libavfilter/fifo.s
-libavfilter/x86
 libavfilter/x86/af_volume_init.s
 libavfilter/x86/vf_gradfun_init.s
 libavfilter/x86/vf_yadif_init.s
