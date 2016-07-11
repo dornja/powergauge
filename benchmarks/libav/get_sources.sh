@@ -13,7 +13,7 @@ if [ ! -d src ] ; then
     mkdir src
 fi
 
-cp create_assembly.sh compile_yasm.sh "$LIBAV"
+cp create_assembly.sh "$LIBAV"
 cd "$LIBAV"
 echo "Running configure"
 ./configure
@@ -24,9 +24,7 @@ echo '#define LIBAV_VERSION "'`./version.sh`'"' > avversion.h
 
 echo "Compiling source"
 ./create_assembly.sh
-./compile_yasm.sh
 rm create_assembly.sh
-rm compile_yasm.sh
 cd -
 
 echo "Copying assembly files"

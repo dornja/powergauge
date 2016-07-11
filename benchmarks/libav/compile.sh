@@ -6,13 +6,12 @@ if [ $# -lt 1 ] ; then
 fi
 
 LIBAV="$1"
+CURDIR=`pwd`
 
 echo "Copying files"
 rsync -ar src/ "$LIBAV"
-
 echo "Compiling"
-cp compilation_script.sh "$LIBAV"
 cd "$LIBAV"
-time ./compilation_script.sh
-rm compilation_script.sh
-cd - > /dev/null
+pwd
+make -f "$CURDIR/Makefile" avconv avplay avprobe
+cd "$CURDIR" > /dev/null
