@@ -3,6 +3,8 @@
 LIBAV="libav-src"
 LIBAV_VERSION="v12_dev0-2969-ga8cbe5a"
 SRC="src"
+CURDIR=`pwd`
+
 
 if [ $# -ne 0 ] ; then
     echo "Usage: $0"
@@ -17,8 +19,6 @@ if [ ! -d "$LIBAV" ] ; then
     cd - > /dev/null
 fi
 
-
-cp create_assembly.sh "$LIBAV"
 cd "$LIBAV"
 echo "Running configure"
 ./configure
@@ -31,10 +31,16 @@ if [ ! -d "$SRC" ] ; then
     mkdir "$SRC"
 fi
 
-echo "Compiling source"
-./create_assembly.sh
-rm create_assembly.sh
-cd -
+echo -n "Compiling source  "
+i=1
+sp="/-\|"
+while read CMD; do
+    eval $CMD || eval 'echo "" ; exit 1'
+    # Progress spinner
+    printf "\b${sp:i++%${#sp}:1}"
+done < "$CURDIR"/create_assembly.sh
+echo ""
+cd "$CURDIR" > /dev/null
 
 echo "Copying assembly files"
 rsync -ar --include "*/" --include "*.s" --exclude "*" --prune-empty-dirs "$LIBAV/" src
