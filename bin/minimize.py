@@ -2,7 +2,7 @@
 
 from contextlib import closing, contextmanager
 from difflib import SequenceMatcher
-import numpy
+import numpy as np
 from optparse import OptionParser
 import os
 import shelve
@@ -98,8 +98,8 @@ configfile = args[ 1 ]
 # 
 ########
 
-def first( sequence ):
-    return list( map( lambda (_,y): y, sequence ) )
+def get_genes( sequence ):
+    return list( map( lambda y: y[ 1 ], sequence ) )
 
 class GenomeBuilder:
     def __init__( self, genprog ):
@@ -110,16 +110,16 @@ class GenomeBuilder:
         if len( genome ) == 0:
             infomsg( "INFO: genome: original" )
         else:
-            infomsg( "INFO: genome:", *first( genome ) )
+            infomsg( "INFO: genome:", *get_genes( genome ) )
         try:
-            with self.genprog.build_variant( first( genome ) ) as exe:
+            with self.genprog.build_variant( get_genes( genome ) ) as exe:
                 yield exe
         except CalledProcessError as e:
             infomsg( "ERROR:", e )
             yield None
 
     def key( self, genome ):
-        return " ".join( first( genome ) )
+        return " ".join( get_genes( genome ) )
 
 class DDGenome( DD ):
     def __init__( self, genprog, builder, deltas ):
@@ -129,7 +129,7 @@ class DDGenome( DD ):
 
         infomsg( "INFO: computing optimized energy usage" )
         self.optimized = self.get_fitness( deltas )
-        self.mean = numpy.mean( self.optimized )
+        self.mean = np.mean( self.optimized )
         assert self.mean > 0, "'optimized' variant has 0 fitness!"
 
     def get_fitness( self, deltas ):
@@ -142,7 +142,7 @@ class DDGenome( DD ):
                 cache[ key ] = list()
                 return list()
             def tester():
-                fitness = self.genprog.run_test( exe )[ 0 ]
+                fitness = list( self.genprog.run_test( exe ) )[ 0 ]
                 infomsg( "   ", fitness )
                 return fitness
             fitness = list()
@@ -163,8 +163,9 @@ class DDGenome( DD ):
             return self.UNRESOLVED
         if any( map( lambda f: f == 0, fitness ) ):
             return self.UNRESOLVED
+        infomsg( "   ", np.mean( fitness ), "+/-", 1.96 * np.std( fitness ) / np.sqrt( len( fitness ) ) )
         pval = mannwhitneyu( self.optimized, fitness )[ 1 ]
-        if pval < options.alpha and numpy.mean( fitness ) < self.mean:
+        if pval < options.alpha and np.mean( fitness ) < self.mean:
             return self.PASS
         else:
             return self.FAIL
@@ -233,10 +234,10 @@ with get_cache() as cache:
                 deltas = list()
     else:
         deltas = brute_force( dd, deltas )
-    infomsg( "simplified genome:\n   ", *first( deltas ) )
+    infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
     base = dd.get_fitness( [] )
     optim = dd.get_fitness( deltas )
-    infomsg( "improvement:", 1 - numpy.mean( base ) / numpy.mean( optim ) )
+    infomsg( "improvement:", 1 - np.mean( base ) / np.mean( optim ) )
 
 if options.save_binary is not None or options.save_sources is not None:
     with builder.build( deltas ) as exe:
@@ -250,6 +251,6 @@ if options.save_binary is not None or options.save_sources is not None:
             infomsg( "saved sources to", options.save_sources )
 if options.save_genome is not None:
     with open( options.save_genome, 'w' ) as fh:
-        infomsg( *first( deltas ), file = fh )
+        infomsg( *get_genes( deltas ), file = fh )
     infomsg( "saved genome to", options.save_genome )
 

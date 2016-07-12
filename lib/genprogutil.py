@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 from contextlib import contextmanager
 import os
 import re
@@ -34,7 +36,7 @@ class GenProgEnv:
 
         with mktemp() as genome_file:
             with open( genome_file, 'w' ) as fh:
-                print >>fh, "--oracle-genome", " ".join( genome )
+                print( "--oracle-genome", " ".join( genome ), file = fh )
             cmd = [
                 self.genprog, self.configfile, genome_file,
                     "--seed", seed,
@@ -82,10 +84,9 @@ class GenProgEnv:
             call( [ "sh", "-c", tmp ] )
             with open( fitnessfile ) as fh:
                 try:
-                    return map( float, next(fh).split() )
-                except StopIteration:
-                    return [0.0]
-
+                    return map( float, next( fh ).split() )
+                except StopIteraion:
+                    return [ 0.0 ]
 
 def lower_genome( genes ):
     fields = re.compile( r'[a-z]\((\d+),(\d+)\)' )
