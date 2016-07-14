@@ -28,7 +28,7 @@ class LibavTest( ParallelTest ):
                          root + '/benchmarks/libav/libav-src',
                          """enc_dec "rawvideo -s 352x288 -pix_fmt yuv420p" tests/data/vsynth1.yuv mov "-c prores -profile hq" rawvideo "-s 352x288 -pix_fmt yuv420p " -keep""",
                          '',
-                         './tests/ref/vsynth/vsynth1-prores',
+                         'genprog-tests/ref/vsynth/vsynth1-prores',
                          '',
                          '1',
                          '',
@@ -38,9 +38,10 @@ class LibavTest( ParallelTest ):
                          '',
                          '1',
                          '',
-                         ''],
+                         '',
+                         outfile],
         }[ self.test ]
-        return cmd, { "stderr": outfile }
+        return cmd, dict() #{ "stderr": outfile }
 
 
     def getParser( self ):
@@ -53,9 +54,16 @@ class LibavTest( ParallelTest ):
             parser.print_help()
             raise ValueError( "insufficient arguments" )
 
-        self.exe  = "tests/fate-run.sh"
+        self.exe  = "tests/genprog-fate-run.sh"
         self.test = args[ 0 ]
-        self.fitnessfile = "../" + args[ 1 ]
+
+        # Horrible hack. Since we've chdir'd into libav-src the fitness file
+        # won't end up where expected, so "../" gets prepended unelss the fitness
+        # file path starts with a "/" (e.g., /dev/tty)
+        if args[ 1 ][ 0 ] == "/":
+            self.fitnessfile = args[ 1 ]
+        else:
+            self.fitnessfile = "../" + args[ 1 ]
 
     def run( self, root, argv = sys.argv ):
         parser = self.getParser()
@@ -77,6 +85,8 @@ class LibavTest( ParallelTest ):
             results = self.getParallelFitness( root )
         except IOError as e:
             exit( e.errno )
+        # except Exception:
+        #     results = list()
 
         fitness = [ ( 0.0, 0 ) ]
         if len( results ) == self.options.jobs:
