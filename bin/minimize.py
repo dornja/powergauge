@@ -71,6 +71,11 @@ parser.add_option(
     "--low-error", metavar = "p", type = float, default = 0.01,
     help = "repeat measurements until (standard error / mean) < (1+p)"
 )
+parser.add_option(
+    "--disable-cache", action = "store_true",
+    help = "disable caching"
+)
+
 options, args = parser.parse_args()
 
 if len( args ) < 2:
@@ -126,6 +131,8 @@ class DDGenome( DD ):
         DD.__init__( self )
         self.builder = builder
         self.genprog = genprog
+        if options.disable_cache:
+            self.cache_outcomes = 0
 
         infomsg( "INFO: computing optimized energy usage" )
         self.optimized = self.get_fitness( deltas )
@@ -139,7 +146,8 @@ class DDGenome( DD ):
             return cache[ key ]
         with self.builder.build( deltas ) as exe:
             if exe is None:
-                cache[ key ] = list()
+                if not options.disable_cache:
+                    cache[ key ] = list()
                 return list()
             def tester():
                 fitness = list( self.genprog.run_test( exe ) )[ 0 ]
@@ -151,7 +159,8 @@ class DDGenome( DD ):
                     fitness = [ 0 ]
                     break
                 fitness.append( value )
-            cache[ key ] = fitness
+            if not options.disable_cache:
+                cache[ key ] = fitness
             return fitness
 
     def _test( self, deltas ):
