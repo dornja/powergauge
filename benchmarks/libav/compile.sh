@@ -19,9 +19,6 @@ if [ ! -d "$DIR/$SRC" ] ; then
     exit 1
 fi
 
-echo "Copying files"
 rsync -ar "$DIR/$SRC/" "$DIR/$LIBAV"
-echo "Compiling"
-cd "$LIBAV"
-pwd
-make -f "$DIR/Makefile" avconv avplay avprobe
+cd "$LIBAV" &> /dev/null
+make -f "$DIR/Makefile" avconv avplay avprobe &> /dev/null
