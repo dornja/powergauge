@@ -14,8 +14,6 @@ import time
 root = os.path.dirname( os.path.dirname( os.path.abspath( sys.argv[ 0 ] ) ) )
 sys.path.insert( 0, os.path.join( root, "lib" ) )
 
-from energymonitor import Emon
-
 parser = OptionParser(
     usage = "%prog [options] host port channel -- command [args...]"
 )
@@ -24,8 +22,12 @@ parser.add_option(
     help = "number of seconds to discard before command"
 )
 parser.add_option(
+    "-i", "--intermediate", action = "store_true",
+    help = "write intermediate values instead of final accumulation"
+)
+parser.add_option(
     "-o", "--output", metavar = "file", default = "/dev/stdout",
-    help = "CSV file to generate"
+    help = "output file to generate"
 )
 parser.add_option(
     "-r", "--repeat", metavar = "N", type = int, default = 1,
@@ -34,7 +36,7 @@ parser.add_option(
 options, args = parser.parse_args()
 
 if len( args ) < 3:
-    parser.print_usage()
+    parser.print_help()
     exit()
 
 host = args[ 0 ]
@@ -44,6 +46,9 @@ cmd  = args[ 3: ]
 
 class EmonServer:
     def __init__( self, host, port ):
+        # Set to None first in case something happens while creating the
+        # connection. That way, self.fh will exist when close() is called.
+        self.fh = None
         self.fh = socket.create_connection( ( host, port ) ).makefile( 'rw' )
 
     def __del__( self ):
@@ -59,7 +64,7 @@ class EmonServer:
         return self
 
     def close( self ):
-        if not self.fh.closed:
+        if self.fh is not None and not self.fh.closed:
             self.fh.write( "CLOSE\n" )
             self.fh.flush()
             self.fh.close()
@@ -72,8 +77,10 @@ class EmonServer:
         self.fh.write( "\n" )
         self.fh.flush()
 
+status = 0
 with EmonServer( host, port ) as emon:
-    emon.send( "RESET", chan )
+    emon.send( "LISTEN", chan )
+    next( emon )
 
     stdout = sys.stdout
     stderr = sys.stderr
@@ -84,11 +91,20 @@ with EmonServer( host, port ) as emon:
             out.flush()
             for i in range( options.repeat ):
                 start = time.time()
-                status = call( cmd, stdout = stdout, stderr = stderr )
-                emon.send( "READ", chan )
-                joules = next( emon ).strip()
-                row = [ time.time() - start, joules ]
-                writer.writerow( map( str, row ) )
-                out.flush()
-                start += row[ 0 ]
-
+                joules = 0.0
+                p = Popen( cmd, stdout = stdout, stderr = stderr )
+                while p.poll() is None:
+                    joules += float( next( emon ).strip() )
+                    if options.intermediate:
+                        stop = time.time()
+                        row = [ stop - start, joules ]
+                        writer.writerow( map( str, row ) )
+                        out.flush()
+                        joules = 0.0
+                        start = stop
+                status = p.returncode
+                if not options.intermediate:
+                    row = [ time.time() - start, joules ]
+                    writer.writerow( map( str, row ) )
+                    out.flush()
+exit( status )
