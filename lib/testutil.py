@@ -147,6 +147,80 @@ class Multitmp:
         if e is not None:
             raise e
 
+class BasicMetric:
+    def __init__( self, in_parallel ):
+        self.in_parallel = in_parallel
+
+    def inParallel( self ):
+        return self.in_parallel
+
+    def run( self, count, prefix, cmd, fitnessfile, **kw ):
+        cmd = prefix + self.prefix + [
+            "-o", fitnessfile,
+            "-r", str( count ),
+            "--"
+        ] + cmd
+        Multitmp.check_call( cmd, **kw )
+
+    def parse( self, fh ):
+        return map( float, next( fh ).split() )
+
+class EmonMetric( BasicMetric ):
+    def __init__( self, root, options ):
+        BasicMetric.__init__( self, False )
+        self.prefix = \
+            [ os.path.join( root, "bin", "emon.py" ) ] + list( options )
+
+    def parse( self, fh ):
+        reader = csv.DictReader( fh )
+        fitness = 0.0
+        for row in reader:
+            fitness += float( row[ "joules" ] )
+        return [ fitness ]
+
+class ModelMetric( BasicMetric ):
+    def __init__( self, root ):
+        BasicMetric.__init__( self, True )
+        self.prefix = [ os.path.join( root, "bin", "est-energy.py" ) ]
+
+class RaplMetric( BasicMetric ):
+    def __init__( self, root, options ):
+        BasicMetric.__init__( self, False )
+        self.prefix = [ os.path.join( root, "bin", "rapl.py" ) ]
+        for plane in options:
+            self.prefix += [ "--plane", plane ]
+
+class TimeMetric( BasicMetric ):
+    def __init__( self, root ):
+        BasicMetric.__init__( self, True )
+
+    def parse( self, fh ):
+        for term in next( fh ).split():
+            if not term.endswith( "elapsed" ):
+                continue
+            term = term[ :-7 ].split( ":" )
+            return [ int( term[ 0 ] ) * 60 + float( term[ 1 ] ) ]
+        return list()
+
+    def run( self, count, prefix, cmd, fitnessfile, **kw ):
+        cmd = prefix + [
+            "/usr/bin/time", "-o", fitnessfile, "--append", "--"
+        ] + cmd
+        for i in range( count ):
+            Multitmp.check_call( cmd, **kw )
+
+class WuMetric( BasicMetric ):
+    def __init__( self, root, options ):
+        BasicMetric.__init__( self, False )
+        self.prefix = [ os.path.join( root, "bin", "wu.py" ), options ]
+
+    def parse( self, fh ):
+        reader = csv.DictReader( fh )
+        row = next( reader )
+        seconds = float( row[ "time" ] )
+        watts   = float( row[ "watts" ] )
+        return [ seconds * watts ]
+
 class ParallelTest:
     def __init__( self ):
         self.output = None
@@ -210,6 +284,15 @@ class ParallelTest:
             parser.print_help()
             raise ValueError( "insufficient arguments" )
 
+        use_default = True
+        for opt in [ self.options.emon, self.options.time, self.options.wu ]:
+            if opt is not None and opt is not False:
+                use_default = False
+        if len( self.options.rapl ) > 0:
+            use_default = False
+        if use_default:
+            self.options.model = True
+
         self.exe  = args[ 0 ]
         self.size = args[ 1 ]
         self.fitnessfile = args[ 2 ]
@@ -236,13 +319,33 @@ class ParallelTest:
             "--verbose", action = "store_true",
             help = "show commands that are executed"
         )
+        parser.add_option_group( group )
+
+        group = OptionGroup( parser, "Fitness Metrics" )
         group.add_option(
-            "--wall", action = "store_true",
-            help = "measure the energy at the wall instead of estimating"
+            "--emon", metavar = "host port chan", nargs = 3,
+            help = "host, port, and channel to connect to emon server at"
+        )
+        group.add_option(
+            "--model", action = "store_true",
+            help = "use the est-energy model; default if no metric specified"
+        )
+        group.add_option(
+            "--rapl", metavar = "plane", action = "append", default = list(),
+            help = "use RAPL (running average power limit) counters on the "
+                   "named plane (intel only)"
+        )
+        group.add_option(
+            "--time", action = "store_true",
+            help = "use time instead of energy as fitness value"
+        )
+        group.add_option(
+            "--wu", metavar = "device",
+            help = "USB device to connect to WattsUp? meter at"
         )
         parser.add_option_group( group )
 
-    def getParallelFitness( self, root ):
+    def getParallelFitness( self, root, metric ):
         with Multitmp( self.options.jobs ) as tmpfit:
             with Multitmp( self.options.jobs, self.getOutputSuffix() ) as output:
                 cmd, kw = self.getCommand( output )
@@ -254,33 +357,16 @@ class ParallelTest:
                     prefix = [ "setarch", platform.machine(), "-R" ]
                     if not self.options.no_limit:
                         prefix += [ os.path.join( root, "bin", "limit" ) ]
-                    if self.options.wall:
-                        prefix += [
-                            os.path.join( root, "bin", "wu.py" ),
-                            "ttyUSB0"
-                        ]
-                    else:
-                        prefix.append( os.path.join( root, "bin", "est-energy.py" ) )
-                    prefix += [
-                        "-o", tmpfit,
-                        "-r", str( self.options.repeat ), "--"
-                    ]
-                    Multitmp.check_call( prefix + cmd, **kw )
+
+                    metric.run( self.options.repeat, prefix, cmd, tmpfit, **kw )
 
                 results = list()
                 if self.validateCorrectness( output ):
                     for fname in tmpfit:
                         with open( fname ) as fh:
-                            if self.options.wall:
-                                reader = csv.DictReader( fh )
-                                row = next( reader )
-                                seconds = float( row[ "time" ] )
-                                watts   = float( row[ "watts" ] )
-                                fitness = [ seconds * watts ]
-                            else:
-                                fitness = map( float, next( fh ).split() )
+                            fitness = metric.parse( fh )
                             fitness = map( lambda x: 1.0 / ( 1.0 + x ), fitness )
-                            results.append( list( fitness ) )
+                            results.append( fitness )
         return results
 
     def run( self, root, argv = sys.argv ):
@@ -299,21 +385,48 @@ class ParallelTest:
         if "/" not in self.exe:
             self.exe = os.path.join( ".", self.exe )
 
+        metrics = list()
+        if self.options.emon is not None:
+            metrics.append( EmonMetric( root, self.options.emon ) )
+        if self.options.model:
+            metrics.append( ModelMetric( root ) )
+        if len( self.options.rapl ) > 0:
+            metrics.append( RaplMetric( root, self.options.rapl ) )
+        if self.options.time:
+            metrics.append( TimeMetric( root ) )
+        if self.options.wu is not None:
+            metrics.append( WuMetric( root, self.options.wu ) )
+
         try:
-            results = self.getParallelFitness( root )
+            results = list()
+            for metric in metrics:
+                if metric.inParallel():
+                    fitness = self.getParallelFitness( root, metric )
+                else:
+                    jobs = self.options.jobs
+                    self.options.jobs = 1
+                    fitness = list()
+                    for i in range( jobs ):
+                        fitness += self.getParallelFitness( root, metric )
+                    self.options.jobs = jobs
+
+                avgs = [ ( 0.0, 0 ) ]
+                if len( fitness ) == self.options.jobs:
+                    for fields in fitness:
+                        while len( avgs ) < len( fields ):
+                            avgs.append( ( 0.0, 0 ) )
+                        for i, x in enumerate( fields ):
+                            y, n = avgs[ i ]
+                            n += 1
+                            y += ( x - y ) / n
+                            avgs[ i ] = y, n
+                    results += [ y for y, n in avgs ]
+                else:
+                    results = [ 0 ]
+                    break
         except IOError as e:
             exit( e.errno )
 
-        fitness = [ ( 0.0, 0 ) ]
-        if len( results ) == self.options.jobs:
-            for result in results:
-                while len( fitness ) < len( result ):
-                    fitness.append( ( 0.0, 0 ) )
-                for i, x in enumerate( result ):
-                    y, n = fitness[ i ]
-                    n += 1
-                    y += ( x - y ) / n
-                    fitness[ i ] = y, n
         with open( self.fitnessfile, 'w' ) as fh:
-            infomsg( *[ "%g" % y for y, n in fitness ], file = fh )
+            infomsg( *[ "%g" % y for y in results ], file = fh )
 
