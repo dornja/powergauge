@@ -1,10 +1,10 @@
---program prores.txt
+--program vsynth1-prores.txt
 --prefix src
 --sanity no
 --single-fitness
 --pos-tests 1
 --neg-tests 0
---compiler-command ./compile.sh
+--compiler-command ./compile.sh __SOURCE_NAME__
 --test-command ./test.py -j 7 prores __FITNESS_FILE__
 --fix-scheme uniform
 --fault-scheme uniform
