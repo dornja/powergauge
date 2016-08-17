@@ -40,9 +40,26 @@ class LibavTest( ParallelTest ):
                          '',
                          '',
                          outfile],
+            "mpeg4":    ['fate-vsynth1-mpeg4', 
+                         '',
+                         '',
+                         root + '/benchmarks/libav/libav-src',
+                         """enc_dec "rawvideo -s 352x288 -pix_fmt yuv420p" tests/data/vsynth1.yuv mp4 "-c mpeg4 -qscale 10 -flags +mv4 -mbd bits" rawvideo "-s 352x288 -pix_fmt yuv420p " -keep""",
+                         '',
+                         'genprog-tests/ref/vsynth/vsynth1-mpeg4',
+                         '',
+                         '1',
+                         '',
+                         '',
+                         '',
+                         '',
+                         '',
+                         '1',
+                         '',
+                         '',
+                         outfile],
         }[ self.test ]
         return cmd, dict() #{ "stderr": outfile }
-
 
     def getParser( self ):
         return OptionParser(
@@ -53,10 +70,16 @@ class LibavTest( ParallelTest ):
         if len( args ) < 2:
             parser.print_help()
             raise ValueError( "insufficient arguments" )
-
         self.exe  = "tests/genprog-fate-run.sh"
-        self.test = args[ 0 ]
-
+        use_default = True
+        for opt in [ self.options.emon, self.options.time, self.options.wu ]:
+            if opt is not None and opt is not False:
+                use_default = False
+        if len( self.options.rapl ) > 0:
+            use_default = False
+        if use_default:
+            self.options.model = True
+        self.test  = args[ 0 ]
         # Horrible hack. Since we've chdir'd into libav-src the fitness file
         # won't end up where expected, so "../" gets prepended unelss the fitness
         # file path starts with a "/" (e.g., /dev/tty)
@@ -64,44 +87,6 @@ class LibavTest( ParallelTest ):
             self.fitnessfile = args[ 1 ]
         else:
             self.fitnessfile = "../" + args[ 1 ]
-
-    def run( self, root, argv = sys.argv ):
-        parser = self.getParser()
-        self.addCommonOptions( parser )
-
-        self.options, args = parser.parse_args( args = argv[ 1: ] )
-        try:
-            self.checkArgs( parser, args )
-        except ValueError:
-            return 0 if len( args ) == 0 else 1
-
-        if find_executable( self.exe ) is None:
-            raise ValueError( "%s: command not found" % self.exe )
-        self.exe = find_executable( self.exe )
-        if "/" not in self.exe:
-            self.exe = os.path.join( ".", self.exe )
-
-        try:
-            results = self.getParallelFitness( root )
-        except IOError as e:
-            exit( e.errno )
-        # except Exception:
-        #     results = list()
-
-        fitness = [ ( 0.0, 0 ) ]
-        if len( results ) == self.options.jobs:
-            for result in results:
-                while len( fitness ) < len( result ):
-                    fitness.append( ( 0.0, 0 ) )
-                for i, x in enumerate( result ):
-                    y, n = fitness[ i ]
-                    n += 1
-                    y += ( x - y ) / n
-                    fitness[ i ] = y, n
-        with open( self.fitnessfile, 'w' ) as fh:
-            infomsg( *[ "%g" % y for y, n in fitness ], file = fh )
-
-
 
 LibavTest().run( root )
 
