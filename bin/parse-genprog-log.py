@@ -20,6 +20,9 @@ parser.add_option(
 parser.add_option(
     "--sort", action="store_true", dest="sort", help = "sort by amount of improvement in fitness. You likely want to include --filter=steps as well"
 )
+parser.add_option(
+    "--no-variant-names", action="store_true", dest="no_variant_names", help="do not output variant names. Greatly reduces file size and R plot times"
+)
 options, args = parser.parse_args()
 
 if len( args ) < 1:
@@ -98,6 +101,8 @@ try:
     writer = csv.writer( out )
     if options.sort:
         writer.writerow( [ "improvement", "evaluation", "fitness", "variant" ] )
+    elif options.no_variant_names:
+        writer.writerow( [ "generation", "fitness" ] )
     else:
         writer.writerow( [ "generation", "fitness", "variant" ] )
     with open( args[ 0 ] ) as fh:
@@ -121,7 +126,10 @@ try:
             source.sort(key=lambda x: x[0])
         for row in source:
             try:
-                writer.writerow( map( str, row ) )
+                if options.no_variant_names:
+                    writer.writerow( map( str, (row[0], row[1]) ) )
+                else:
+                    writer.writerow( map( str, row ) )
             except IOError as e:
                 # if this is piped to head, python will complain when the pipe
                 # is closed
