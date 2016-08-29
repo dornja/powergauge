@@ -2,7 +2,9 @@
 
 from __future__ import print_function
 
+from collections import defaultdict
 from contextlib import closing, contextmanager
+from datetime import datetime
 from functools import partial
 from optparse import OptionParser
 import os
@@ -31,24 +33,11 @@ if len( args ) < 2:
     parser.print_help()
     exit()
 
-class Channel:
-    def __init__( self ):
-        self.reset()
-
-    def addEnergy( self, energy ):
-        self.energy += energy
-
-    def getEnergy( self ):
-        return self.energy
-
-    def reset( self ):
-        self.energy = 0.0
-
 class Emon:
     def __init__( self, device, baud ):
         self.fh = serial.Serial( device, baud, timeout = 20 )
         self.buf = ""
-        self.channels = list()
+        self.listeners = defaultdict( list )
         self.start = None
 
         self.fh.write( ";delay 0;set period %d;" % options.period )
@@ -69,10 +58,11 @@ class Emon:
     def fileno( self ):
         return self.fh.fileno()
 
-    def getChannel( self, num ):
-        while len( self.channels ) <= num:
-            self.channels.append( Channel() )
-        return self.channels[ num ]
+    def addListener( self, chan, listener ):
+        self.listeners[ chan ].append( listener )
+
+    def removeListener( self, chan, listener ):
+        self.listeners[ chan ].remove( listener )
 
     def readPower( self ):
         self.buf += self.fh.read( self.fh.inWaiting() )
@@ -93,10 +83,16 @@ class Emon:
             line = map( float, line )
             if line[ 0 ] == 0.0:
                 continue
-            while len( self.channels ) < len( line ):
-                self.channels.append( Channel() )
-            for chan, watts in zip( self.channels, line[ 1: ] ):
-                chan.addEnergy( abs( watts ) * duration )
+            for chan, watts in enumerate( line[ 1: ] ):
+                if len( self.listeners[ chan ] ) > 0:
+                    joules = abs( watts ) * duration
+                    print(
+                        "Channel %d: %d listeners, %g joules"
+                            % ( chan, len( self.listeners[ chan ] ), joules )
+                    )
+                    sys.stdout.flush()
+                for listener in self.listeners[ chan ]:
+                    listener.update( joules )
 
 class Client:
     def __init__( self, sock, addr, emon, readback, writeback ):
@@ -105,6 +101,7 @@ class Client:
         self.emon = emon
         self.readback  = readback
         self.writeback = writeback
+        self.chan = None
         self.inbuf = ""
         self.outbuf = ""
         self.closing = 0
@@ -122,8 +119,7 @@ class Client:
 
     def close( self ):
         if self.closing == 0:
-            self.outbuf += "CLOSE\n"
-            self.writeback[ self.fileno() ] = self.send
+            self.write( "CLOSE\n" )
             self.closing = 1
 
     def fileno( self ):
@@ -139,32 +135,49 @@ class Client:
             request = request.split()
             if request[ 0 ] == "CLOSE":
                 self.close()
-            elif request[ 0 ] == "READ":
-                nrg = self.emon.getChannel( int( request[ 1 ] ) ).getEnergy()
-                self.outbuf += "%g\n" % nrg
-                self.writeback[ self.fileno() ] = self.send
-            elif request[ 0 ] == "RESET":
-                self.emon.getChannel( int( request[ 1 ] ) ).reset()
+            elif request[ 0 ] == "LISTEN":
+                newchan = int( request[ 1 ] )
+                if self.chan is not None:
+                    self.emon.removeListener( self.chan, self )
+                self.chan = newchan
+                self.emon.addListener( self.chan, self )
             else:
-                self.outbuf += "bad request: " + request[ 0 ] + "\n"
-                self.outbuf += "valid requests:\n"
-                self.outbuf += "CLOSE\n"
-                self.outbuf += "READ <n>\n"
-                self.outbuf += "RESET <n>\n"
-                self.writeback[ self.fileno() ] = self.send
+                msg = "bad request: " + request[ 0 ] + "\n" \
+                      "valid requests:\n" \
+                      "    CLOSE\n" \
+                      "    LISTEN <n>\n"
+                self.write( msg )
+                return
 
     def send( self ):
         if self.closing == 2:
             raise RuntimeError( "write after close" )
-        n = self.sock.send( self.outbuf )
-        self.outbuf = self.outbuf[ n: ]
+        try:
+            n = self.sock.send( self.outbuf )
+            self.outbuf = self.outbuf[ n: ]
+        except socket.error as e:
+            self.outbuf = ""
+            if self.closing == 0:
+                self.closing = 1
         if len( self.outbuf ) == 0:
             del self.writeback[ self.fileno() ]
             if self.closing == 1:
-                print( "INFO: closing connection:", self.addr )
+                print(
+                    "INFO: [%s] closing connection:" % str( datetime.now() ),
+                    self.addr
+                )
+                if self.chan is not None:
+                    self.emon.removeListener( self.chan, self )
                 del self.readback[ self.fileno() ]
                 self.sock.close()
                 self.closing = 2
+
+    def write( self, msg ):
+        self.outbuf += msg
+        self.writeback[ self.fileno() ] = self.send
+
+    def update( self, joules ):
+        self.write( "%g\n" % joules )
 
 class Server:
     def __init__( self, emon, hostname, port ):
@@ -195,7 +208,7 @@ class Server:
 
     def newConnection( self, readback, writeback ):
         conn, addr = self.serv.accept()
-        print( "INFO: received connection:", addr )
+        print( "INFO: [%s] received connection:" % str( datetime.now() ), addr )
         conn = Client( conn, addr, self.emon, readback, writeback )
         readback[ conn.fileno() ] = conn.recv
 
@@ -235,5 +248,9 @@ if not os.path.exists( dev ):
 
 with Emon( dev, baud ) as emon:
     with Server( emon, options.hostname, options.port ) as server:
-        main_loop( emon, server )
+        try:
+            main_loop( emon, server )
+        except KeyboardInterrupt:
+            pass
+
 
