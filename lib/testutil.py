@@ -150,20 +150,49 @@ class Multitmp:
 class BasicMetric:
     def __init__( self, in_parallel ):
         self.in_parallel = in_parallel
+        self.fitness_file = None
+
+    def __del__( self ):
+        self.close()
+
+    def close( self ):
+        if self.fitness_file is not None:
+            self.fitness_file.__exit__( None, None, None )
+            self.fitness_file = None
+
+    def getFitnessFile( self, num_jobs ):
+        if self.fitness_file is not None:
+            self.close()
+        self.fitness_file = Multitmp( num_jobs ).__enter__()
+        return self.fitness_file
 
     def inParallel( self ):
         return self.in_parallel
 
-    def run( self, count, prefix, cmd, fitnessfile, **kw ):
-        cmd = prefix + self.prefix + [
-            "-o", fitnessfile,
+    def getPrefix( self, count, num_jobs ):
+        self.getFitnessFile( num_jobs )
+        return self.prefix + [
+            "-o", self.getFitnessFile( num_jobs ),
             "-r", str( count ),
             "--"
-        ] + cmd
-        Multitmp.check_call( cmd, **kw )
+        ]
 
     def parse( self, fh ):
         return map( float, next( fh ).split() )
+
+    # results is a list of lists: one for each dimension containing a value for
+    # each run
+    def getFitness( self ):
+        results = list()
+        if self.fitness_file is not None:
+            for fname in self.fitness_file:
+                with open( fname ) as fh:
+                    fitness = [ 1.0 / ( 1.0 + x ) for x in self.parse( fh ) ]
+                    while len( results ) < len( fitness ):
+                        results.append( list() )
+                    for dim, value in zip( results, fitness ):
+                        dim.append( value )
+        return results
 
 class EmonMetric( BasicMetric ):
     def __init__( self, root, options ):
@@ -192,7 +221,7 @@ class RaplMetric( BasicMetric ):
 
 class TimeMetric( BasicMetric ):
     def __init__( self, root ):
-        BasicMetric.__init__( self, True )
+        BasicMetric.__init__( self, False )
 
     def parse( self, fh ):
         for term in next( fh ).split():
@@ -202,12 +231,9 @@ class TimeMetric( BasicMetric ):
             return [ int( term[ 0 ] ) * 60 + float( term[ 1 ] ) ]
         return list()
 
-    def run( self, count, prefix, cmd, fitnessfile, **kw ):
-        cmd = prefix + [
-            "/usr/bin/time", "-o", fitnessfile, "--append", "--"
-        ] + cmd
-        for i in range( count ):
-            Multitmp.check_call( cmd, **kw )
+    def getPrefix( self, count, num_jobs ):
+        self.getFitnessFile( num_jobs )
+        return [ "/usr/bin/time", "-o", self.fitness_file, "--append", "--" ]
 
 class WuMetric( BasicMetric ):
     def __init__( self, root, options ):
@@ -345,28 +371,27 @@ class ParallelTest:
         )
         parser.add_option_group( group )
 
-    def getParallelFitness( self, root, metric ):
-        with Multitmp( self.options.jobs ) as tmpfit:
-            with Multitmp( self.options.jobs, self.getOutputSuffix() ) as output:
-                cmd, kw = self.getCommand( output )
-                with open( "/dev/null", 'w' ) as null:
-                    kw.setdefault( "stdout", null )
-                    kw.setdefault( "stderr", null )
-                    kw[ "verbose" ] = self.options.verbose
+    def getParallelFitness( self, root, metrics ):
+        with Multitmp( self.options.jobs, self.getOutputSuffix() ) as output:
+            cmd, kw = self.getCommand( output )
+            with open( "/dev/null", 'w' ) as null:
+                kw.setdefault( "stdout", null )
+                kw.setdefault( "stderr", null )
+                kw[ "verbose" ] = self.options.verbose
 
-                    prefix = [ "setarch", platform.machine(), "-R" ]
-                    if not self.options.no_limit:
-                        prefix += [ os.path.join( root, "bin", "limit" ) ]
+                prefix = [ "setarch", platform.machine(), "-R" ]
+                if not self.options.no_limit:
+                    prefix += [ os.path.join( root, "bin", "limit" ) ]
+                for metric in metrics:
+                    prefix += metric.getPrefix( self.options.repeat, self.options.jobs )
+                Multitmp.check_call( prefix + cmd, **kw )
 
-                    metric.run( self.options.repeat, prefix, cmd, tmpfit, **kw )
-
-                results = list()
-                if self.validateCorrectness( output ):
-                    for fname in tmpfit:
-                        with open( fname ) as fh:
-                            fitness = metric.parse( fh )
-                            fitness = map( lambda x: 1.0 / ( 1.0 + x ), fitness )
-                            results.append( fitness )
+            # results is a list of lists: one for each dimension containing a
+            # value for each run
+            results = list()
+            if self.validateCorrectness( output ):
+                for metric in metrics:
+                    results.extend( metric.getFitness() )
         return results
 
     def run( self, root, argv = sys.argv ):
@@ -398,29 +423,28 @@ class ParallelTest:
             metrics.append( WuMetric( root, self.options.wu ) )
 
         try:
-            results = list()
-            for metric in metrics:
-                if metric.inParallel():
-                    fitness = self.getParallelFitness( root, metric )
-                else:
-                    jobs = self.options.jobs
-                    self.options.jobs = 1
-                    fitness = list()
-                    for i in range( jobs ):
-                        fitness += self.getParallelFitness( root, metric )
-                    self.options.jobs = jobs
+            if all( [ metric.inParallel() for metric in metrics ] ):
+                fitness = self.getParallelFitness( root, metrics )
+            else:
+                jobs = self.options.jobs
+                self.options.jobs = 1
+                fitness = list()
+                for i in range( jobs ):
+                    result = self.getParallelFitness( root, metrics )
+                    while len( fitness ) < len( result ):
+                        fitness.append( list() )
+                    for dim, values in zip( fitness, result ):
+                        dim.extend( values )
+                self.options.jobs = jobs
 
-                avgs = [ ( 0.0, 0 ) ]
-                if len( fitness ) == self.options.jobs:
-                    for fields in fitness:
-                        while len( avgs ) < len( fields ):
-                            avgs.append( ( 0.0, 0 ) )
-                        for i, x in enumerate( fields ):
-                            y, n = avgs[ i ]
-                            n += 1
-                            y += ( x - y ) / n
-                            avgs[ i ] = y, n
-                    results += [ y for y, n in avgs ]
+            results = list()
+            for dim in fitness:
+                if len( dim ) == self.options.jobs:
+                    y, n = 0.0, 0
+                    for x in dim:
+                        n += 1
+                        y += ( x - y ) / n
+                    results.append( y )
                 else:
                     results = [ 0 ]
                     break
