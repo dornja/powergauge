@@ -30,20 +30,19 @@ struct calibration_info {
     float pCal[ NUM_CT ];
 };
 
-float phi;
-
 calibration_info cal;
 boolean calibration_mode = false;
 
-unsigned long lastpost = 0;
-unsigned long period = 500;
+unsigned long nextpost = 0;
+unsigned long period = 100;
 unsigned long samples = 0;
 
 String buffer;
 
-float offsetV  = ADC_COUNTS >> 1;
-float V, Vsq;
+float offsetV;
+float V, Vsq, Vratio;
 
+float Iratio[ NUM_CT ];
 float offsetI[ NUM_CT ];
 float Isq[ NUM_CT ];
 float Pinst[ NUM_CT ];
@@ -61,9 +60,17 @@ setup()
     // Initialize calibration factors.
 
     EEPROM.get( 0, cal );
-    phi = cal.vCal * cal.iCal[ 3 ];
 
-    lastpost = 0;
+    Vratio = cal.vCal / 1000 / ADC_COUNTS;
+    offsetV = ADC_COUNTS >> 1;
+    V = ADC_COUNTS >> 1;
+    Vsq = 0.0f;
+    for ( int i = 0; i < NUM_CT; ++i ) {
+        Iratio[ i ] = cal.iCal[ i ] / 1000 / ADC_COUNTS;
+        offsetI[ i ] = ADC_COUNTS >> 1;
+        Isq[ i ] = 0.0f;
+        Pinst[ i ] = 0.0f;
+    }
 
     digitalWrite( LEDpin, LOW );
 }
@@ -123,6 +130,7 @@ menu()
                 float value = command.substring( 9 ).toFloat();
                 if ( value != 0.0f ) {
                     cal.vCal = value;
+                    Vratio = cal.vCal / 1000 / ADC_COUNTS;
                     EEPROM.put( 0, cal );
                 }
             } else if ( command.startsWith( F( "set iCal " ) ) ) {
@@ -132,6 +140,7 @@ menu()
                     float value = command.substring( space + 1 ).toFloat();
                     if ( value != 0.0f ) {
                         cal.iCal[ idx - 1 ] = value;
+                        Iratio[ idx - 1 ] = cal.iCal[ idx - 1 ] / 1000 / ADC_COUNTS;
                         EEPROM.put( 0, cal );
                     }
                 } else {
@@ -199,9 +208,10 @@ menu()
     }
     // Cause us to report all zeros / nans before resuming. This allows
     // whatever is reading the output to sync with the changes if necessary.
-    lastpost = millis() - period;
+    nextpost = 0;
 }
 
+#ifdef BROKEN
 template< boolean Calibrate >
 struct main {
 
@@ -211,8 +221,9 @@ loop()
 {
     // Only post data every $period milliseconds
 
-    if ( period <= ( millis() - lastpost ) ) {
-        lastpost = millis();
+    long now = millis();
+    if ( nextpost <= now ) {
+        nextpost = now + period;
         float supplyV = readVcc() / 1000.0 / ADC_COUNTS;
 
         Serial.print( samples );
@@ -228,53 +239,23 @@ loop()
         float tmp, iRatio, iRMS, power;
 
         tmp = vRatio / samples;
-        iRatio = cal.iCal[ 0 ] * supplyV;
-        if ( Calibrate ) {
-            iRMS = iRatio * sqrt( Isq[ 0 ] / samples );
-            Isq[ 0 ] = 0.0;
-            Serial.print( ' ' );
-            Serial.print( iRMS );
-        }
-        power = tmp * iRatio * Pinst[ 0 ] * cal.pCal[ 0 ];
-        Serial.print( ' ' );
-        Serial.print( power );
-        Pinst[ 0 ] = 0.0;
 
-        iRatio = cal.iCal[ 1 ] * supplyV;
-        if ( Calibrate ) {
-            iRMS = iRatio * sqrt( Isq[ 1 ] / samples );
-            Isq[ 1 ] = 0.0;
+        for ( int j = 0; j < 4; ++j ) {
+            iRatio = cal.iCal[ j ] * supplyV;
+            if ( Calibrate ) {
+                iRMS = iRatio * sqrt( Isq[ j ] / samples );
+                Isq[ j ] = 0.0;
+                Serial.print( ' ' );
+                Serial.print( iRMS, 3 );
+            }
+            //power = tmp * iRatio * Pinst[ j ] * cal.pCal[ j ];
+            power = tmp * iRatio;
+            power *= Pinst[ j ];
+            power *= cal.pCal[ j ];
             Serial.print( ' ' );
-            Serial.print( iRMS );
+            Serial.print( power );
+            Pinst[ j ] = 0.0;
         }
-        power = tmp * iRatio * Pinst[ 1 ] * cal.pCal[ 1 ];
-        Serial.print( ' ' );
-        Serial.print( power );
-        Pinst[ 1 ] = 0.0;
-
-        iRatio = cal.iCal[ 2 ] * supplyV;
-        if ( Calibrate ) {
-            iRMS = iRatio * sqrt( Isq[ 2 ] / samples );
-            Isq[ 2 ] = 0.0;
-            Serial.print( ' ' );
-            Serial.print( iRMS );
-        }
-        power = tmp * iRatio * Pinst[ 2 ] * cal.pCal[ 2 ];
-        Serial.print( ' ' );
-        Serial.print( power );
-        Pinst[ 2 ] = 0.0;
-
-        iRatio = cal.iCal[ 3 ] * supplyV;
-        if ( Calibrate ) {
-            iRMS = iRatio * sqrt( Isq[ 3 ] / samples );
-            Isq[ 3 ] = 0.0;
-            Serial.print( ' ' );
-            Serial.print( iRMS );
-        }
-        power = tmp * iRatio * Pinst[ 3 ] * cal.pCal[ 3 ];
-        Serial.print( ' ' );
-        Serial.print( power );
-        Pinst[ 3 ] = 0.0;
 
         Serial.print( "\r\n" );
 
@@ -290,39 +271,14 @@ loop()
     if ( Calibrate )
         Vsq += V * V;
 
-    // unrolling the loop improves performance
-
-    float I = analogRead( 1 );
-    offsetI[ 0 ] += ( I - offsetI[ 0 ] ) / 1024;
-    I -= offsetI[ 0 ];
-    if ( Calibrate )
-        Isq[ 0 ] += I * I;
-    //Pinst[ 0 ] += Vphase * I;
-    Pinst[ 0 ] += V * I;
-
-    I = analogRead( 2 );
-    offsetI[ 1 ] += ( I - offsetI[ 1 ] ) / 1024;
-    I -= offsetI[ 1 ];
-    if ( Calibrate )
-        Isq[ 1 ] += I * I;
-    //Pinst[ 1 ] += Vphase * I;
-    Pinst[ 1 ] += V * I;
-
-    I = analogRead( 3 );
-    offsetI[ 2 ] += ( I - offsetI[ 2 ] ) / 1024;
-    I -= offsetI[ 2 ];
-    if ( Calibrate )
-        Isq[ 2 ] += I * I;
-    //Pinst[ 2 ] += Vphase * I;
-    Pinst[ 2 ] += V * I;
-
-    I = analogRead( 4 );
-    offsetI[ 3 ] += ( I - offsetI[ 3 ] ) / 1024;
-    I -= offsetI[ 3 ];
-    if ( Calibrate )
-        Isq[ 3 ] += I * I;
-    //Pinst[ 3 ] += Vphase * I;
-    Pinst[ 3 ] += V * I;
+    for ( int j = 0; j < 4; ++j ) {
+        float I = analogRead( j + 1 );
+        offsetI[ j ] += ( I - offsetI[ j ] ) / 1024;
+        I -= offsetI[ j ];
+        if ( Calibrate )
+            Isq[ j ] += I * I;
+        Pinst[ j ] += V * I;
+    }
 
     if ( Serial.available() )
         menu();
@@ -337,6 +293,53 @@ loop()
     else
         main< false >::loop();
 }
+
+#else
+
+void
+loop()
+{
+    float V = analogRead( 0 );
+    offsetV += ( V - offsetV ) / 1024;
+    V -= offsetV;
+    Vsq += V * V;
+
+    for ( char j = 0; j < NUM_CT; ++j ) {
+        float I = analogRead( j + 1 );
+        offsetI[ j ] += ( I - offsetI[ j ] ) / 1024;
+        I -= offsetI[ j ];
+        Isq[ j ] += I * I;
+    }
+
+    samples += 1;
+
+    if ( nextpost <= millis() ) {
+        float vcc = readVcc();
+        float Vrms = sqrt( Vsq / samples );
+        Vrms *= Vratio * vcc;
+
+        Serial.print( samples );
+        Serial.print( ' ' );
+        Serial.print( Vrms, 3 );
+
+        for ( char j = 0; j < NUM_CT; ++j ) {
+            float Irms = sqrt( Isq[ j ] / samples );
+            Irms *= Iratio[ j ] * vcc;
+            Isq[ j ] = 0;
+            Serial.print( ' ' );
+            Serial.print( Irms, 3 );
+        }
+
+        Serial.print( ' ' );
+        Serial.println( millis() );
+
+        Vsq = 0;
+        samples = 0;
+        nextpost = millis() + period;
+    }
+}
+
+#endif
 
 /*
  Taken from https://github.com/openenergymonitor/EmonLib/blob/master/EmonLib.cpp
