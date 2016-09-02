@@ -2,10 +2,15 @@ root := $(if $(MAKEFILES_LIST),\
          $(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST)),\
          $(CURDIR))
 
-all: $(root)/../../bin/limit $(root)/../../bin/getcpu
+CFLAGS=-O3
 
-$(root)/../../bin/limit: limit.c
-$(root)/../../bin/getcpu: getcpu.c
+all:
+all: $(root)/../bin/limit
+all: $(root)/../bin/getcpu
+
+$(root)/../bin/%: %.c
+	@$(MAKE) --no-print-directory $*
+	mv $* $@
 
 arduino: power-meter power-meter/read-meter
 
