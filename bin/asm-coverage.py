@@ -96,7 +96,9 @@ def perf_report_rows( lines, sep = "," ):
 def perf_annotate_instrs( lines ):
     for line in lines:
         if "Source code & Disassembly" in line:
-            obj = line.split()[ -1 ]
+            print line
+            obj = line.split()[ 7 ]
+            print obj
             fun = None
             continue
         m = stmt_cvg.match( line )
