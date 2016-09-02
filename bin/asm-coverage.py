@@ -304,7 +304,7 @@ def smooth( lines, sd ):
 
 def get_line_coverage( metrics, asmfuns, gauss_width = None ):
 
-    for fname in asm_files:
+    for fname in asmfiles:
         for ( fname, fun ), instrs in assembly_funs( fname ):
             if not fun in metrics:
                 infomsg(
