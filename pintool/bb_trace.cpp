@@ -28,20 +28,37 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 END_LEGAL */
+
+// Most of this code is copy-pasted from the examples that come with pin
+
 #include <stdio.h>
 #include "pin.H"
+#include "instlib.H"
 
+using namespace INSTLIB;
+
+FILTER filter;
 FILE * trace;
 
-// This function is called before every instruction is executed
-// and prints the IP
+// This function is called before every basic block and prints the
+// IP and number of instructions in the BB
 VOID printip(VOID *ip, UINT32 bbcount) { fprintf(trace, "%p %d\n", ip, bbcount); }
 
 // Call every time a basic block is hit
 VOID Trace(TRACE trace, VOID *v) {
+  // Use filtering to select traces. See filter.H in $PIN_ROOT/source/tools/InstLib
+  // for the possible options that can be used as a filter
+
+  // I typically use the -filter_no_shared_libs option. Make sure that you
+  // specify the tool before using this flag
+  // (e.g., $PIN_ROOT/pin -t bb_trace.so -filter_no_shared_libs -- EXE ARGS) -JL
+  if (!filter.SelectTrace(trace))
+    return;
+  
   for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl))
     {
-      BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)printip, IARG_INST_PTR, IARG_UINT32, BBL_NumIns(bbl), IARG_UINT32, BBL_NumIns(bbl), IARG_END);
+      BBL_InsertCall(bbl, IPOINT_BEFORE, (AFUNPTR)printip, IARG_INST_PTR,
+      IARG_UINT32, BBL_NumIns(bbl), IARG_UINT32, BBL_NumIns(bbl), IARG_END);
     }
 }
 
@@ -75,6 +92,9 @@ int main(int argc, char * argv[])
 
     // Register Instruction to be called to instrument instructions
     TRACE_AddInstrumentFunction(Trace, 0);
+
+    // Activate the filter
+    filter.Activate();
     
     // Register Fini to be called when the application exits
     PIN_AddFiniFunction(Fini, 0);
