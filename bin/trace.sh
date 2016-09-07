@@ -48,8 +48,8 @@ shift
 ARGS=$*
 
 TRACE="bb-trace.out"
-DUMPFILE="$EXE-dump.out"
-SORTEDTRACE="bb-trace-$EXE-sorted.out"
+DUMPFILE="`basename $EXE`-dump.out"
+SORTEDTRACE="bb-trace-`basename $EXE`-sorted.out"
 
 # If bb-trace.out exists, we don't need to run pin
 if [ ! -f "$TRACE" ]; then
@@ -77,7 +77,7 @@ fi
 
 # Dump text section of executable and format addresses
 if [ ! -f "$DUMPFILE" ]; then
-    echo "Dumping $EXE"
+    echo "Dumping `basename $EXE`"
     EXEPATH=`which $EXE`
     TMPFILE=$(mktemp /tmp/dump.XXXX)
     objdump -d --prefix-addresses -j ".text" $EXEPATH | tail -n +6 | sed 's/^0\+/0x/' > "$TMPFILE"
