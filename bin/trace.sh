@@ -50,6 +50,7 @@ ARGS=$*
 TRACE="bb-trace.out"
 DUMPFILE="`basename $EXE`-dump.out"
 SORTEDTRACE="bb-trace-`basename $EXE`-sorted.out"
+PERADDRESS="per-address-`basename $EXE`.out"
 
 # If bb-trace.out exists, we don't need to run pin
 if [ ! -f "$TRACE" ]; then
@@ -86,7 +87,7 @@ else
     echo "$DUMPFILE found"
 fi
 
-# Sort the trace and count the number of executions
+# Sort the trace and count the number of executions of each basic block
 if [ ! -f "$SORTEDTRACE" ]; then
     echo "Sorting trace"
     TMPFILE=$(mktemp /tmp/sorted.XXXX)
@@ -96,6 +97,26 @@ else
     echo "$SORTEDTRACE found"
 fi
 
-# # while read -r address bb_size; do
-# #     grep "$address" $dumpfile -A "$((bb_size-1))"
-# # done < $1
+
+# This is pretty dumb, fix later
+
+# Grep through object file to get the per-address execution numbers
+TMPFILE=$(mktemp /tmp/something.XXXX)
+while read -r COUNT ADDRESS BB_SIZE; do
+    grep "$ADDRESS" "$DUMPFILE" -A "$((BB_SIZE-1))" | sed "s/^/$COUNT\t/" | cut -f 1 -d " ">> "$TMPFILE"
+done < "$SORTEDTRACE"
+mv "$TMPFILE" "$PERADDRESS"
+
+# Format the output
+TOTAL=0
+while read -r ADDRESS FUNCTION INSTRUCTION; do
+    COUNT=`grep "[0-9]*[[:space:]]*$ADDRESS" "$PERADDRESS" | awk '{print $1}' | paste -s -d '+' | bc`
+    if [ -z "$COUNT" ]; then
+        COUNT=0
+    fi
+    # Increment count so that lines that are never run do not have weight 0
+    COUNT=$((COUNT+1))
+    TOTAL=$((TOTAL+COUNT))
+    printf "%s\t%s\t%s\t%s\n" "$COUNT" "$ADDRESS" "$FUNCTION" "$INSTRUCTION"
+done < "$DUMPFILE"
+echo "Total count: $TOTAL"
