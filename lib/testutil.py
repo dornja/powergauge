@@ -334,6 +334,14 @@ class ParallelTest:
             help = "treat this run as the 'golden' run with the correct result"
         )
         group.add_option(
+            "--cpu", metavar = "N", type = int,
+            help = "restrict the program to be run on the given core"
+        )
+        group.add_option(
+            "--csv", metavar = "file",
+            help = "write fitness to named CSV file as well"
+        )
+        group.add_option(
             "--no-limit", action = "store_true",
             help = "do not limit run time of tested command"
         )
@@ -379,11 +387,14 @@ class ParallelTest:
                 kw.setdefault( "stderr", null )
                 kw[ "verbose" ] = self.options.verbose
 
-                prefix = [ "setarch", platform.machine(), "-R" ]
+                prefix = list()
+                prefix += [ "setarch", platform.machine(), "-R" ]
                 if not self.options.no_limit:
                     prefix += [ os.path.join( root, "bin", "limit" ) ]
                 for metric in metrics:
                     prefix += metric.getPrefix( self.options.repeat, self.options.jobs )
+                if self.options.cpu is not None:
+                    prefix += [ "taskset", "-c", str( self.options.cpu ) ]
                 Multitmp.check_call( prefix + cmd, **kw )
 
             # results is a list of lists: one for each dimension containing a
@@ -423,7 +434,8 @@ class ParallelTest:
             metrics.append( WuMetric( root, self.options.wu ) )
 
         try:
-            if all( [ metric.inParallel() for metric in metrics ] ):
+            if self.options.cpu is None and \
+                    all( [ metric.inParallel() for metric in metrics ] ):
                 fitness = self.getParallelFitness( root, metrics )
             else:
                 jobs = self.options.jobs
@@ -451,6 +463,10 @@ class ParallelTest:
         except IOError as e:
             exit( e.errno )
 
+        if self.options.csv is not None:
+            with open( self.options.csv, 'a' ) as fh:
+                writer = csv.writer( fh )
+                writer.writerow( [ "%g" % y for y in results ] )
         with open( self.fitnessfile, 'w' ) as fh:
             infomsg( *[ "%g" % y for y in results ], file = fh )
 
