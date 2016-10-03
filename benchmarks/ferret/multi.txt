@@ -20,9 +20,6 @@ hash_table.s
 heap.s
 image.s
 import.s
-libgsl.a
-libgslcblas.a
-libjpeg.a
 local.s
 LSH_query_batch.s
 LSH_query.s
