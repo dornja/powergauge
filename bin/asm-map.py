@@ -70,25 +70,28 @@ class MisalignedCodeError(Exception):
         return s
 
 synonyms = {
-    "je":   "jz",
-    "jne":  "jnz",
-    "jb":   "jnae",
-    "jc":   "jnae",
-    "jae":  "jnc",
-    "jnb":  "jnc",
-    "jbe":  "jna",
-    "ja":   "jnbe",
-    "jl":   "jnge",
-    "jge":  "jnl",
-    "jle":  "jng",
-    "jg":   "jnle",
-    "jp":   "jpe",
-    "jnp":  "jpo",
-    "jcxz": "jecxz",
-    "setnb": "setae",
+    "cmovnb": "cmovae",
+    "je":     "jz",
+    "jne":    "jnz",
+    "jb":     "jnae",
+    "jc":     "jnae",
+    "jae":    "jnc",
+    "jnb":    "jnc",
+    "jbe":    "jna",
+    "ja":     "jnbe",
+    "jl":     "jnge",
+    "jge":    "jnl",
+    "jle":    "jng",
+    "jg":     "jnle",
+    "jp":     "jpe",
+    "jnp":    "jpo",
+    "jcxz":   "jecxz",
+    "setnb":  "setae",
 }
 
 def isnop( instr ):
+    while instr[ 0 ].startswith( "data32" ):
+        instr.pop(0)
     if instr[ 0 ].startswith( "nop" ):
         return True
     if instr[ 0 ].startswith( "xchg" ) and instr[ 1 ].startswith( "%ax,%ax" ):
@@ -196,7 +199,7 @@ def report_rows( lines, sep = "\t" ):
     def split( line ):
         return tuple([ field.strip() for field in line.split( sep ) ])
 
-    for line in lines:        
+    for line in lines:
         count, addr, fun, ins = split(line)
         yield count, addr, fun, ins
         
