@@ -72,31 +72,23 @@ if [ ! -f "$TRACE" ]; then
     fi
 
     # Run the pin tool
-    echo "Running pin"
     eval "$PIN" -t "$BBTRACE" -filter_no_shared_libs -- "$EXE" "$ARGS"
 fi
 
 # Dump text section of executable and format addresses
 if [ ! -f "$DUMPFILE" ]; then
-    echo "Dumping `basename $EXE`"
     EXEPATH=`which $EXE`
     TMPFILE=$(mktemp /tmp/dump.XXXX)
     objdump -d --prefix-addresses -j ".text" $EXEPATH | tail -n +6 | sed 's/^0\+/0x/' > "$TMPFILE"
     mv "$TMPFILE" "$DUMPFILE"
-else
-    echo "$DUMPFILE found"
 fi
 
 # Sort the trace and count the number of executions of each basic block
 if [ ! -f "$SORTEDTRACE" ]; then
-    echo "Sorting trace"
     TMPFILE=$(mktemp /tmp/sorted.XXXX)
     sort "$TRACE" | uniq -c > "$TMPFILE"
     mv "$TMPFILE" "$SORTEDTRACE"
-else
-    echo "$SORTEDTRACE found"
 fi
-
 
 # This is pretty dumb, fix later
 
@@ -107,8 +99,13 @@ while read -r COUNT ADDRESS BB_SIZE; do
 done < "$SORTEDTRACE"
 mv "$TMPFILE" "$PERADDRESS"
 
+# # Dump text section of executable and format addresses
+# EXEPATH=`which $EXE`
+# TMPFILE=$(mktemp /tmp/dump.XXXX)
+# objdump -d --prefix-addresses -l -j ".text" $EXEPATH | sed 's/^0\+/0x/' > "$TMPFILE"
+# mv "$TMPFILE" other-dump.out
+
 # Format the output
-TOTAL=0
 while read -r ADDRESS FUNCTION INSTRUCTION; do
     COUNT=`grep "[0-9]*[[:space:]]*$ADDRESS" "$PERADDRESS" | awk '{print $1}' | paste -s -d '+' | bc`
     if [ -z "$COUNT" ]; then
@@ -116,7 +113,7 @@ while read -r ADDRESS FUNCTION INSTRUCTION; do
     fi
     # Increment count so that lines that are never run do not have weight 0
     COUNT=$((COUNT+1))
-    TOTAL=$((TOTAL+COUNT))
+    # Strip leading < and trailing +offset> from function names
+    FUNCTION=`echo "$FUNCTION" | sed -e 's/<//' -e 's/\(+0x[0-9a-f]*\)\?>//'`
     printf "%s\t%s\t%s\t%s\n" "$COUNT" "$ADDRESS" "$FUNCTION" "$INSTRUCTION"
 done < "$DUMPFILE"
-echo "Total count: $TOTAL"
