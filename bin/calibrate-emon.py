@@ -69,7 +69,7 @@ class Emon:
         self.fh.write( ";delay 0;set %s %g;" % ( configvar, value ) )
         self.fh.flush()
 
-def calibrate( device, baud, chan, wu_device, threshold = 0.01 ):
+def calibrate( device, baud, chan, wu_device, do_volt = True, threshold = 0.01 ):
     def read_wattsup( wu_device, counter, samples ):
         cmd = [
             os.path.join( root, "bin", "wu.py" ), wu_device,
@@ -166,11 +166,12 @@ def calibrate( device, baud, chan, wu_device, threshold = 0.01 ):
         pCal.append( config[ "pCal 4" ] )
 
     with calibration_mode( device, baud ):
-        infomsg( "calibrating voltage" )
-        do_calibration( device, baud, "vCal", vCal, 276.9,
-            partial( read_wattsup, wu_device, "volts" ),
-            partial( read_emon, device, baud, [ 1 ] ),
-        )
+        if do_volt:
+            infomsg( "calibrating voltage" )
+            do_calibration( device, baud, "vCal", vCal, 276.9,
+                partial( read_wattsup, wu_device, "volts" ),
+                partial( read_emon, device, baud, [ 1 ] ),
+            )
         infomsg( "calibrating current" )
         do_calibration( device, baud, "iCal %d" % chan, iCal[ chan - 1 ], 90.9,
             partial( read_wattsup, wu_device, "amps" ),
@@ -213,11 +214,17 @@ if __name__ == "__main__":
     parser.add_option(
         "--wu", metavar = "device", help = "device name for WattsUP?"
     )
+    parser.add_option(
+        "--no-volt", action = "store_true", help = "do not calibrate voltage"
+    )
     options, args = parser.parse_args()
 
     if len( args ) < 1 or options.wu is None or options.emon is None:
         parser.print_help()
         exit()
     else:
-        calibrate( options.emon, options.baud, int( args[ 0 ] ), options.wu, )
+        calibrate(
+            options.emon, options.baud, int( args[ 0 ] ), options.wu,
+            not options.no_volt
+        )
 
