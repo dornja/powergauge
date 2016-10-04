@@ -48,7 +48,7 @@ infomsg( "pass" )
 
 infomsg( "checking that limit command works..." )
 check_path( limit )
-check_cmd( [ limit, "true" ] )
+check_cmd( [ limit, "1", "true" ] )
 infomsg( "pass" )
 
 config = Config()

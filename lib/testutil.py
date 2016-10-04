@@ -350,6 +350,10 @@ class ParallelTest:
             help = "number of times to repeat the test"
         )
         group.add_option(
+            "-t", "--timeout", metavar = "sec", type = int, default = 60,
+            help = "max number of seconds to allow test process to run"
+        )
+        group.add_option(
             "--verbose", action = "store_true",
             help = "show commands that are executed"
         )
@@ -390,7 +394,10 @@ class ParallelTest:
                 prefix = list()
                 prefix += [ "setarch", platform.machine(), "-R" ]
                 if not self.options.no_limit:
-                    prefix += [ os.path.join( root, "bin", "limit" ) ]
+                    prefix += [
+                        os.path.join( root, "bin", "limit" ),
+                        str( self.options.timeout)
+                    ]
                 for metric in metrics:
                     prefix += metric.getPrefix( self.options.repeat, self.options.jobs )
                 if self.options.cpu is not None:

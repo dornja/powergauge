@@ -57,11 +57,18 @@ int
 main( int argc, char ** argv )
 {
     struct sigaction act;
-    char ** args;
+    char ** args, *end;
+    unsigned seconds;
     int i;
 
-    if ( argc < 2 ) {
-        fprintf( stderr, "no command\n" );
+    if ( argc < 3 ) {
+        fprintf( stderr, "Usage: %s seconds command...\n", argv[ 0 ] );
+        return 127;
+    }
+
+    seconds = strtoul( argv[ 1 ], &end, 10 );
+    if ( end[ 0 ] != '\0' ) {
+        fprintf( stderr, "cannot parse integer '%s'\n", argv[ 1 ] );
         return 127;
     }
 
@@ -74,14 +81,14 @@ main( int argc, char ** argv )
         setpgid( pid, pid );
 
         set_limit( RLIMIT_AS, (rlim_t)2 * 1024 * 1024 * 1024 );
-        set_limit( RLIMIT_CPU, 10 );
         set_limit( RLIMIT_FSIZE, (rlim_t)2 * 1024 * 1024 * 1024 );
         set_limit( RLIMIT_NOFILE, 128 );
         set_limit( RLIMIT_NPROC, 1024 );
 
         args = (char**) malloc( sizeof( char* ) * argc );
-        for ( i = 1; i < argc; ++i )
-            args[ i - 1 ] = argv[ i ];
+        for ( i = 2; i < argc; ++i )
+            args[ i - 2 ] = argv[ i ];
+        args[ argc - 2 ] = 0;
         args[ argc - 1 ] = 0;
 
         if ( execvp( *args, args ) ) {
@@ -89,22 +96,24 @@ main( int argc, char ** argv )
             return 127;
         }
     } else {
-        act.sa_handler = child_timeout;
-        act.sa_flags   = 0;
-        i = sigemptyset( &act.sa_mask );
-        if ( i == -1 ) {
-            perror( NULL );
-            kill( pid, SIGKILL );
-            return 127;
-        }
+        if ( seconds > 0 ) {
+            act.sa_handler = child_timeout;
+            act.sa_flags   = 0;
+            i = sigemptyset( &act.sa_mask );
+            if ( i == -1 ) {
+                perror( NULL );
+                kill( pid, SIGKILL );
+                return 127;
+            }
 
-        i = sigaction( SIGALRM, &act, NULL );
-        if ( i == -1 ) {
-            perror( NULL );
-            kill( pid, SIGKILL );
-            return 127;
+            i = sigaction( SIGALRM, &act, NULL );
+            if ( i == -1 ) {
+                perror( NULL );
+                kill( pid, SIGKILL );
+                return 127;
+            }
+            alarm( seconds );
         }
-        alarm( 60 );
         i = 127;
         if ( waitpid( pid, &i, 0 ) != pid )
             perror( NULL );
