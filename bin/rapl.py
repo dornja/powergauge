@@ -15,20 +15,24 @@ sys.path.insert( 0, os.path.join( root, "lib" ) )
 from util import infomsg
 
 def get_planes():
-    planes = dict()
-    rapl_dir = "/sys/class/powercap/intel-rapl/intel-rapl:*/"
-    for fname in glob( rapl_dir ):
+    def process_dir( fname ):
         with open( os.path.join( fname, "name" ) ) as fh:
             package = next( fh ).strip()
         energy = os.path.join( fname, "energy_uj" )
-        planes[ package ] = energy
+        with open( os.path.join( fname, "max_energy_range_uj" ) ) as fh:
+            limit = int( next( fh ) ) + 1
+        return package, energy, limit
+
+    planes = dict()
+    rapl_dir = "/sys/class/powercap/intel-rapl/intel-rapl:*/"
+    for fname in glob( rapl_dir ):
+        package, energy, limit = process_dir( fname )
+        planes[ package ] = energy, limit
 
         plane_dir = os.path.join( fname, "intel-rapl:*:*/" )
         for fname in glob( plane_dir ):
-            with open( os.path.join( fname, "name" ) ) as fh:
-                plane = next( fh ).strip()
-            energy = os.path.join( fname, "energy_uj" )
-            planes[ package + "/" + plane ] = energy
+            plane, energy, limit = process_dir( fname )
+            planes[ package + "/" + plane ] = energy, limit
     return planes
 
 planes = get_planes()
@@ -73,20 +77,20 @@ def energy_future():
 
     start = list()
     for plane in options.plane:
-        fname = planes[ plane ]
+        fname = planes[ plane ][ 0 ]
         with open( fname ) as fh:
             infomsg( "reading from plane:", fname )
             start.append( int( next( fh ) ) )
     try:
         yield energy
     finally:
-        stop = list()
-        for plane in options.plane:
-            fname = planes[ plane ]
+        for i, plane in enumerate( options.plane ):
+            fname = planes[ plane ][ 0 ]
             with open( fname ) as fh:
-                stop.append( int( next( fh ) ) )
-        for i in range( len( start ) ):
-            energy[ i ] = ( stop[ i ] - start[ i ] ) / 1000000.0
+                delta = int( next( fh ) ) - start[ i ]
+            if delta < 0:
+                delta += planes[ plane ][ 1 ]
+            energy[ i ] = delta * 1e-6
 
 cmd = args
 stdout = sys.stdout
