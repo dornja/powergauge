@@ -455,25 +455,23 @@ class ParallelTest:
                     for dim, values in zip( fitness, result ):
                         dim.extend( values )
                 self.options.jobs = jobs
-
-            results = list()
-            for dim in fitness:
-                if len( dim ) == self.options.jobs:
-                    y, n = 0.0, 0
-                    for x in dim:
-                        n += 1
-                        y += ( x - y ) / n
-                    results.append( y )
-                else:
-                    results = [ 0 ]
-                    break
         except IOError as e:
             exit( e.errno )
+
+        results = [ list() for i in range( self.options.jobs ) ]
+        for dim in fitness:
+            if len( dim ) != self.options.jobs:
+                results = [ 0 ]
+                break
+            for i, x in enumerate( dim ):
+                results[ i ].append( x )
 
         if self.options.csv is not None:
             with open( self.options.csv, 'a' ) as fh:
                 writer = csv.writer( fh )
-                writer.writerow( [ "%g" % y for y in results ] )
+                for row in results:
+                    writer.writerow( [ "%g" % y for y in row ] )
         with open( self.fitnessfile, 'w' ) as fh:
-            infomsg( *[ "%g" % y for y in results ], file = fh )
+            for row in results:
+                infomsg( *[ "%g" % y for y in row ], file = fh )
 
