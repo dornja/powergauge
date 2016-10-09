@@ -350,6 +350,10 @@ class ParallelTest:
             help = "number of times to repeat the test"
         )
         group.add_option(
+            "-t", "--timeout", metavar = "sec", type = int, default = 60,
+            help = "max number of seconds to allow test process to run"
+        )
+        group.add_option(
             "--verbose", action = "store_true",
             help = "show commands that are executed"
         )
@@ -390,7 +394,10 @@ class ParallelTest:
                 prefix = list()
                 prefix += [ "setarch", platform.machine(), "-R" ]
                 if not self.options.no_limit:
-                    prefix += [ os.path.join( root, "bin", "limit" ) ]
+                    prefix += [
+                        os.path.join( root, "bin", "limit" ),
+                        str( self.options.timeout)
+                    ]
                 for metric in metrics:
                     prefix += metric.getPrefix( self.options.repeat, self.options.jobs )
                 if self.options.cpu is not None:
@@ -399,10 +406,12 @@ class ParallelTest:
 
             # results is a list of lists: one for each dimension containing a
             # value for each run
-            results = list()
             if self.validateCorrectness( output ):
+                results = list()
                 for metric in metrics:
                     results.extend( metric.getFitness() )
+            else:
+                results = [ [ 0 ] ]
         return results
 
     def run( self, root, argv = sys.argv ):
@@ -448,25 +457,23 @@ class ParallelTest:
                     for dim, values in zip( fitness, result ):
                         dim.extend( values )
                 self.options.jobs = jobs
-
-            results = list()
-            for dim in fitness:
-                if len( dim ) == self.options.jobs:
-                    y, n = 0.0, 0
-                    for x in dim:
-                        n += 1
-                        y += ( x - y ) / n
-                    results.append( y )
-                else:
-                    results = [ 0 ]
-                    break
         except IOError as e:
             exit( e.errno )
+
+        results = [ list() for i in range( self.options.jobs ) ]
+        for dim in fitness:
+            if len( dim ) != self.options.jobs:
+                results = [ 0 ]
+                break
+            for i, x in enumerate( dim ):
+                results[ i ].append( x )
 
         if self.options.csv is not None:
             with open( self.options.csv, 'a' ) as fh:
                 writer = csv.writer( fh )
-                writer.writerow( [ "%g" % y for y in results ] )
+                for row in results:
+                    writer.writerow( [ "%g" % y for y in row ] )
         with open( self.fitnessfile, 'w' ) as fh:
-            infomsg( *[ "%g" % y for y in results ], file = fh )
+            for row in results:
+                infomsg( *[ "%g" % y for y in row ], file = fh )
 

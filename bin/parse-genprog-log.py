@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/env python
 
 import csv
 from optparse import OptionParser
@@ -37,7 +37,16 @@ def optmax( a, b ):
     return max( a, b )
 
 def getEntries( linesrc ):
-    variant_pat = re.compile( r"^\t\s*(\d+(\.\d+)?)\s+(.*)" )
+    # A pattern for floating point numbers. This appears a couple times in the
+    # variant pattern, so I made a separate string to interpolate in instead of
+    # copying it verbatim and making a single extra-long pattern. Note that the
+    # pattern here does not capture any groups: the (?:) glyph indicates a
+    # non-capturing group in python.
+
+    f = r"-?(?:(?:\d+(?:\.\d+)?(?:[eE]-?\d+)?)|inf)"
+    variant_pat = re.compile(
+        r"^\t\s*({0})\s+(?:\+/-\s+({0})\s+)?(.*)".format( f )
+    )
     generation_pat = re.compile( r"generation (\d+) " )
 
     count = 0
@@ -60,10 +69,12 @@ def getEntries( linesrc ):
 def statsFilter( entries ):
     global best
     global numEntries
+    global unique
     global original
 
     for gen, fitness, variant in entries:
         numEntries += 1
+        unique.add( variant )
         if variant == "original":
             original = fitness
         best = optmax( best, fitness )
@@ -92,6 +103,7 @@ def stepsFilter( entries ):
 original = None
 best = None
 numEntries = 0
+unique = set()
 
 if options.csv is None:
     out = open( "/dev/null", 'w' )
@@ -152,4 +164,5 @@ if options.csv is None:
         print "fitness improvement: %2.4g%%" % ( ( ( best - original ) / original ) * 100 )
         print "energy improvement:  %2.4g%%" % ( ( 1 - ( best_energy / orig_energy ) ) * 100 )
     print "variants considered:", numEntries
+    print "unique variants:    ", len( unique )
 
