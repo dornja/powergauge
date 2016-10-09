@@ -39,10 +39,16 @@ using namespace INSTLIB;
 
 FILTER filter;
 FILE * trace;
+PIN_MUTEX trace_mutex;
+
 
 // This function is called before every basic block and prints the
 // IP and number of instructions in the BB
-VOID printip(VOID *ip, UINT32 bbcount) { fprintf(trace, "%p %d\n", ip, bbcount); }
+VOID printip(VOID *ip, UINT32 bbcount) { 
+  PIN_MutexLock(&trace_mutex);
+  fprintf(trace, "%p %d\n", ip, bbcount); 
+  PIN_MutexUnlock(&trace_mutex);
+}
 
 // Call every time a basic block is hit
 VOID Trace(TRACE trace, VOID *v) {
@@ -86,7 +92,7 @@ INT32 Usage()
 int main(int argc, char * argv[])
 {
     trace = fopen("bb-trace.out", "w");
-    
+    PIN_MutexInit(&trace_mutex);
     // Initialize pin
     if (PIN_Init(argc, argv)) return Usage();
 
@@ -101,6 +107,6 @@ int main(int argc, char * argv[])
     
     // Start the program, never returns
     PIN_StartProgram();
-    
+    PIN_MutexFini(&trace_mutex);
     return 0;
 }
