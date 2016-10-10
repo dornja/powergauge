@@ -406,10 +406,12 @@ class ParallelTest:
 
             # results is a list of lists: one for each dimension containing a
             # value for each run
-            results = list()
             if self.validateCorrectness( output ):
+                results = list()
                 for metric in metrics:
                     results.extend( metric.getFitness() )
+            else:
+                results = [ [ 0 ] ]
         return results
 
     def run( self, root, argv = sys.argv ):
