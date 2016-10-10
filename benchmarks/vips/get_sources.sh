@@ -1,11 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 
 CC=/usr/bin/gcc
 
 CFLAGS="
 -std=gnu99
 -O3
--g
 -funroll-loops
 -fprefetch-loop-arrays
 -pthread
@@ -51,10 +50,10 @@ else
     # First, build the libraries this package depends on
 
     libs="libxml2 glib zlib"
-    #for lib in $libs ; do
-    #    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p $lib -a clean
-    #    PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p $lib -a build
-    #done
+    for lib in $libs ; do
+        PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p $lib -a clean || exit $?
+        PATH="$1/bin:$PATH" "$1/bin/parsecmgmt" -p $lib -a build || exit $?
+    done
 
     # Need to know the compilation platform to know which libraries to use
 
@@ -71,6 +70,10 @@ else
             fi
         done
     done
+    if [ "X$plat" == "X" ] ; then
+        echo "could not auto-detect platform for libraries"
+        exit 2
+    fi
 
     # Copy the libraries we need so that we don't have to remember the
     # compilation platform later.
@@ -78,12 +81,12 @@ else
     mkdir -p src
     src=`pwd`/src
 
-    cp "$parsec/pkgs/libs/libxml2/inst/amd64-linux.gcc/lib/libxml2.a" src/
-    cp "$parsec/pkgs/libs/glib/inst/amd64-linux.gcc/lib/libgmodule-2.0.a" src/
-    cp "$parsec/pkgs/libs/glib/inst/amd64-linux.gcc/lib/libgobject-2.0.a" src/
-    cp "$parsec/pkgs/libs/glib/inst/amd64-linux.gcc/lib/libgthread-2.0.a" src/
-    cp "$parsec/pkgs/libs/glib/inst/amd64-linux.gcc/lib/libglib-2.0.a" src/
-    cp "$parsec/pkgs/libs/zlib/inst/amd64-linux.gcc/lib/libz.a" src/
+    cp "$parsec/pkgs/libs/libxml2/inst/$plat/lib/libxml2.a" src/ || exit $?
+    cp "$parsec/pkgs/libs/glib/inst/$plat/lib/libgmodule-2.0.a" src/ || exit $?
+    cp "$parsec/pkgs/libs/glib/inst/$plat/lib/libgobject-2.0.a" src/ || exit $?
+    cp "$parsec/pkgs/libs/glib/inst/$plat/lib/libgthread-2.0.a" src/ || exit $?
+    cp "$parsec/pkgs/libs/glib/inst/$plat/lib/libglib-2.0.a" src/ || exit $?
+    cp "$parsec/pkgs/libs/zlib/inst/$plat/lib/libz.a" src/ || exit $?
 
     configdir=`mktemp -d`
     cleanup()

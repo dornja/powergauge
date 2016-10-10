@@ -39,14 +39,14 @@ class VipsTest( ParallelTest ):
             Multitmp.check_call( [ "mv", tmp, outfile ] )
         return ParallelTest.validateCorrectness( self, outfile )
 
-    def getParallelFitness( self, root ):
+    def getParallelFitness( self, *args ):
         with mktemp( prefix = "vips" ) as tmpexe:
             oldexe = self.exe
             shutil.copyfile( self.exe, tmpexe )
             shutil.copymode( self.exe, tmpexe )
             try:
                 self.exe = tmpexe
-                return ParallelTest.getParallelFitness( self, root )
+                return ParallelTest.getParallelFitness( self, *args )
             finally:
                 self.exe = oldexe
 
