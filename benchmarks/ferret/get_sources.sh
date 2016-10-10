@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # I combined get_sources.sh and compile.sh since they both use the same
 # compilation flags. The compilation flags were determined by building the
