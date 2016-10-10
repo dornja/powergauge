@@ -13,6 +13,9 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Default location of the bb_trace tool relative to the location of this script
 BBTRACE="$DIR/../pintool/obj-intel64/bb_trace.so"
 
+# Output file. Default is /dev/stdout
+OUTPUT="/dev/stdout"
+
 function show_help {
     echo "Usage: $(basename $0) [OPTION]... -- [EXE] [ARGS]
 
@@ -23,21 +26,30 @@ a sorted and formatted version of the trace is stored in bb-trace-EXE-sorted.out
 
 Options:
   -h   show this help
+  -o   output file. Default: /dev/stdout
   -p   location of pin executable. Default: \$PIN_ROOT/pin
-  -t   location of bb_trace.so. Default: goa2/pintool/obj-intel64/bb_trace.so"
+  -t   location of bb_trace.so. Default: goa2/pintool/obj-intel64/bb_trace.so"  
 }
 
-while getopts "h?t:p:" opt; do
+if [ "$#" -lt 1 ]; then
+    show_help
+    exit 0
+fi
+
+while getopts "h?t:p:o:" opt; do
     case "$opt" in
 	h|\?)
 	    show_help
 	    exit 0
 	    ;;
 	t)
-	    BBTRACE=$OPTARG
+	    BBTRACE="$OPTARG"
 	    ;;
 	p)
-	    PIN=$OPTARG
+	    PIN="$OPTARG"
+	    ;;
+	o)
+	    OUTPUT="$OPTARG"
     esac
 done
 
@@ -47,10 +59,16 @@ EXE=$1
 shift
 ARGS=$*
 
-TRACE="bb-trace.out"
-DUMPFILE="`basename $EXE`-dump.out"
-SORTEDTRACE="bb-trace-`basename $EXE`-sorted.out"
-PERADDRESS="per-address-`basename $EXE`.out"
+TRACEDIR="profile-cache"
+TRACE="$TRACEDIR/bb-trace.out"
+DUMPFILE="$TRACEDIR/`basename $EXE`-dump.out"
+SORTEDTRACE="$TRACEDIR/bb-trace-`basename $EXE`-sorted.out"
+PERADDRESS="$TRACEDIR/per-address-`basename $EXE`.out"
+
+# Create the trace folder
+if [ ! -d "$TRACEDIR" ]; then
+    mkdir "$TRACEDIR"
+fi
 
 # If bb-trace.out exists, we don't need to run pin
 if [ ! -f "$TRACE" ]; then
@@ -73,6 +91,7 @@ if [ ! -f "$TRACE" ]; then
 
     # Run the pin tool
     eval "$PIN" -t "$BBTRACE" -filter_no_shared_libs -- "$EXE" "$ARGS"
+    mv bb-trace.out "$TRACE"
 fi
 
 # Dump text section of executable and format addresses
@@ -90,20 +109,16 @@ if [ ! -f "$SORTEDTRACE" ]; then
     mv "$TMPFILE" "$SORTEDTRACE"
 fi
 
-# This is pretty dumb, fix later
-
 # Grep through object file to get the per-address execution numbers
-TMPFILE=$(mktemp /tmp/something.XXXX)
+TMPFILE=$(mktemp /tmp/per-address.XXXX)
 while read -r COUNT ADDRESS BB_SIZE; do
     grep "$ADDRESS" "$DUMPFILE" -A "$((BB_SIZE-1))" | sed "s/^/$COUNT\t/" | cut -f 1 -d " ">> "$TMPFILE"
 done < "$SORTEDTRACE"
 mv "$TMPFILE" "$PERADDRESS"
 
-# # Dump text section of executable and format addresses
-# EXEPATH=`which $EXE`
-# TMPFILE=$(mktemp /tmp/dump.XXXX)
-# objdump -d --prefix-addresses -l -j ".text" $EXEPATH | sed 's/^0\+/0x/' > "$TMPFILE"
-# mv "$TMPFILE" other-dump.out
+if [ -f "$OUTPUT" ]; then
+    rm -f "$OUTPUT"
+fi
 
 # Format the output
 while read -r ADDRESS FUNCTION INSTRUCTION; do
@@ -115,5 +130,5 @@ while read -r ADDRESS FUNCTION INSTRUCTION; do
     COUNT=$((COUNT+1))
     # Strip leading < and trailing +offset> from function names
     FUNCTION=`echo "$FUNCTION" | sed -e 's/<//' -e 's/\(+0x[0-9a-f]*\)\?>//'`
-    printf "%s\t%s\t%s\t%s\n" "$COUNT" "$ADDRESS" "$FUNCTION" "$INSTRUCTION"
+    printf "%s\t%s\t%s\t%s\n" "$COUNT" "$ADDRESS" "$FUNCTION" "$INSTRUCTION" >> "$OUTPUT"
 done < "$DUMPFILE"
