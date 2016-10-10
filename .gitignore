@@ -19,4 +19,10 @@ benchmarks/fluidanimate/src
 benchmarks/freqmine/inputs
 benchmarks/freqmine/outputs
 benchmarks/freqmine/src
+benchmarks/vips/inputs
+benchmarks/vips/outputs
+benchmarks/vips/src
+benchmarks/x264/inputs
+benchmarks/x264/outputs
+benchmarks/x264/src
 pintool/obj-*
