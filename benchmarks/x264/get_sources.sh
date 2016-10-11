@@ -28,7 +28,7 @@ if [ `basename "$0"` = "compile.sh" ] ; then
     fi
 
     src=`dirname "$1"`
-    $CC -o "$2" "$src"/*.s -lm -lpthread -s
+    $CC -o "$2" "$src"/*.s -lm -lpthread
     exit $?
 else
     if [ $# -lt 1 ] ; then
@@ -53,7 +53,6 @@ else
     rsync -av "$prefix/src/" "$tmp"
 
     cd "$tmp"
-    patch -p5 < "$cwd/double-free.patch" || exit $?
     ./configure || exit $?
 
     srcs="
