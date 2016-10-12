@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 LIBAV="libav-src"
 LIBAV_VERSION="v12_dev0-2969-ga8cbe5a"

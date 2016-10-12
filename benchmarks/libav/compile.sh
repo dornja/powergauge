@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 LIBAV="libav-src"
 SRC=`dirname "$1"`
