@@ -179,6 +179,8 @@ def assembly_instrs( fname ):
                 continue
             if line.strip()[ 0 ] == "#":
                 continue
+            if line.strip()[ -1 ] == ":":
+                continue
             if line.strip()[ 0 ] == ".":
                 terms = line.split()
                 if terms[ 0 ] == ".type" and terms[ 2 ] == "@function":
