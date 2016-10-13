@@ -17,10 +17,10 @@ for i in range( 3 ):
 sys.path.append( os.path.join( root, "lib" ) )
 from util import infomsg, mktemp, pipeline
 
-parser = OptionParser( usage = "%prog [options] blender.tar.gz inputs.zip" )
+parser = OptionParser( usage = "%prog [options] blender.tar.gz" )
 options, args = parser.parse_args()
 
-if len( args ) < 2:
+if len( args ) < 1:
     parser.print_help()
     exit()
 
@@ -81,6 +81,8 @@ with tarfile.open( tarball ) as tarball:
 
 buildir = os.path.abspath( "build" )
 infomsg( "INFO: running CMake" )
+if os.path.exists( buildir ):
+    check_call( [ "rm", "-rf", buildir ] )
 os.makedirs( buildir )
 with chdir( buildir ):
     check_call( [ "cmake", tardir ] )
@@ -106,7 +108,6 @@ with mktemp() as log:
         [ "make", "-C", buildir, "VERBOSE=1", "V=1", "install" ],
         [ "tee", log ]
     ] )
-    check_call( [ "cp", log, "compile.log" ] )
 
     infomsg( "INFO: collecting assembly files" )
     asmfiles = dict()
@@ -115,17 +116,21 @@ with mktemp() as log:
             for fname in fnames:
                 if os.path.splitext( fname )[ 1 ] == ".s":
                     fname = os.path.join( d, fname )
-                    print( fname, file = fh )
-                    objname = os.path.splitext( fname )[ 0 ] + ".o"
-                    asmfiles[ objname ] = fname
+                    relpath = fname[ len( buildir ) + 1 : ]
+                    print( relpath, file = fh )
+                    objname = os.path.splitext( relpath )[ 0 ] + ".o"
+                    asmfiles[ objname ] = relpath
 
     depgraph = dict()
     argflags = [ "-o", "-isystem" ]
 
     cwd = None
     def fixpath( path ):
-        if cwd is not None:
-            return os.path.normpath( os.path.join( cwd, path ) )
+        if cwd is None:
+            return path
+        path = os.path.normpath( os.path.join( cwd, path ) )
+        if path.startswith( buildir ):
+            path = path[ len( buildir ) + 1 : ]
         return path
 
     infomsg( "INFO: parsing compile commands" )
@@ -137,9 +142,9 @@ with mktemp() as log:
                 line = line[ 3: ]
 
             if line[ 0 ] in [ "/usr/bin/ar" ]:
-                archive = fixpath( line[ 2 ] )
-                line[ 2 ] = archive
-                depgraph[ archive ] = [ fixpath(p) for p in args[3:] ], [ line ]
+                line[ 2: ] = map( fixpath, line[ 2: ] )
+                archive = line[ 2 ]
+                depgraph[ archive ] = line[ 3: ], [ line ]
             if line[ 0 ] in [ "/usr/bin/cc", "/usr/bin/c++" ]:
                 outfile = fixpath( line[ line.index( "-o" ) + 1 ] )
                 srcs = list()

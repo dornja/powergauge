@@ -2,6 +2,7 @@
 
 from optparse import OptionParser
 import os
+from subprocess import check_call
 import sys
 
 root = os.path.abspath( sys.argv[ 0 ] )
@@ -9,6 +10,7 @@ for i in range( 3 ):
     root = os.path.dirname( root )
 sys.path.append( os.path.join( root, "lib" ) )
 from testutil import Multitmp, ParallelTest
+from util import mktemp
 
 # Run test.py -h to get usage information
 
@@ -23,6 +25,19 @@ class BlenderTest( ParallelTest ):
             help = "max threshold of average per-pixel error to allow"
         )
         return parser
+
+    def getParallelFitness( self, *args ):
+        true_exe = "build/bin/blender"
+        temp_exe = self.exe
+        with mktemp() as tmp:
+            check_call( [ "cp", "-p", true_exe, tmp ] )
+            try:
+                check_call( [ "cp", "-p", self.exe, true_exe ] )
+                self.exe = true_exe
+                return ParallelTest.getParallelFitness( self, *args )
+            finally:
+                check_call( [ "cp", "-p", tmp, true_exe ] )
+                self.exe = temp_exe
 
     def getCommand( self, outfile ):
         blend, render = {

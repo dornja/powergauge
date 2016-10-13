@@ -11,12 +11,12 @@ root=`cd "$root" ; pwd`
 src=`dirname "$1"`
 exe=$2
 
-tmpdir=collateral/build
+tmpdir=build
 
 rsync -a --delete "$root/src/" "$tmpdir"
 chmod -R u+w $tmpdir
 
-rsync -a --checksum --no-times "$src/" "$tmpdir"
+rsync -a --checksum --no-times --include "*/" --include "*.s" --exclude "*" "$src/" "$tmpdir"
 chmod -R u+w $tmpdir
 
 make -C $tmpdir -f reassemble.mk > /dev/null 2>&1 || exit $?

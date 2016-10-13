@@ -7,6 +7,11 @@ repair/
 
 benchmarks/blackscholes/inputs
 benchmarks/blackscholes/outputs
+benchmarks/blender/build
+benchmarks/blender/inputs
+benchmarks/blender/multi.txt
+benchmarks/blender/outputs
+benchmarks/blender/src
 benchmarks/bodytrack/inputs
 benchmarks/bodytrack/outputs
 benchmarks/bodytrack/src
