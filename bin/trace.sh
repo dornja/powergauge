@@ -126,8 +126,6 @@ while read -r ADDRESS FUNCTION INSTRUCTION; do
     if [ -z "$COUNT" ]; then
         COUNT=0
     fi
-    # Increment count so that lines that are never run do not have weight 0
-    COUNT=$((COUNT+1))
     # Strip leading < and trailing +offset> from function names
     FUNCTION=`echo "$FUNCTION" | sed -e 's/<//' -e 's/\(+0x[0-9a-f]*\)\?>//'`
     printf "%s\t%s\t%s\t%s\n" "$COUNT" "$ADDRESS" "$FUNCTION" "$INSTRUCTION" >> "$OUTPUT"
