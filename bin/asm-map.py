@@ -34,14 +34,14 @@ else:
         "-o", "--output", metavar = "file", default = "/dev/stdout",
         help = "write profile info to named file"
     )
-    # parser.add_option(
-    #     "-r", "--repeat", metavar = "N", type = int, default = 1,
-    #     help = "run the command N times"
-    # )
-    # parser.add_option(
-    #     "-s", "--smooth", metavar = "width", type = int,
-    #     help = "apply Gaussian smoothing with standard deviation = width"
-    # )
+    parser.add_option(
+        "-i", "--input", metavar = "file", dest="infile", default = "coverage.data",
+        help = "get coverage data from named file"
+    )
+    parser.add_option(
+        "-s", "--source-dir", metavar = "directory", dest="source_dir",
+        help = "directory containing the source files"
+    )
     options, args = parser.parse_args()
 
 label    = re.compile( r"^[._A-Za-z0-9]+:" )
@@ -90,7 +90,7 @@ synonyms = {
 }
 
 def isnop( instr ):
-    while instr[ 0 ].startswith( "data32" ):
+    while instr[ 0 ].startswith( "data32" ) or instr[ 0 ].startswith( "data16" ):
         instr.pop(0)
     if instr[ 0 ].startswith( "nop" ):
         return True
@@ -170,15 +170,24 @@ def get_line_coverage( metrics, asmfuns ):
                 yield fname, line, cvg
 
 def assembly_instrs( fname ):
-    with open( fname ) as fh:
+    floc = fname
+    if options.source_dir is not None:
+        if options.source_dir[ -1 ] != "/":
+            floc = options.source_dir + "/" + fname
+        else:
+            floc = options.source_dir + fname
+    with open( floc ) as fh:
         fun = None
         linenum = 0
         for line in fh:
             linenum += 1
+            # Skip empty lines
             if line.strip() == "":
                 continue
+            # Skip GAS comments
             if line.strip()[ 0 ] == "#":
                 continue
+            # Skip labels
             if line.strip()[ -1 ] == ":":
                 continue
             if line.strip()[ 0 ] == ".":
@@ -209,10 +218,9 @@ def report_rows( lines, sep = "\t" ):
         count, addr, fun, ins = split(line)
         yield count, addr, fun, ins
         
-def get_metrics( data_file = "coverage.data" ):
+def get_metrics( data_file ):
     # Metrics maps functions to lists of ( count, instruction ) tuples
     metrics = defaultdict( list )
-    # STATIC FUNCTIONS BAD, NEED TO FIX
     with open( data_file, 'r') as fh:
         for count, addr, fun, ins in report_rows( fh.readlines() ):
             metrics[ fun ].append( ( count, ins.split() ) )
@@ -228,7 +236,7 @@ def get_localization( asmfiles ):
     accum = defaultdict( lambda: 0.0 )
     
     localization = list()
-    metrics = get_metrics()
+    metrics = get_metrics(options.infile)    
     for fname, line, cvg in get_line_coverage( metrics, asmfuns ):
         accum[ fname, line ] += int(cvg)
 
@@ -255,18 +263,6 @@ if __name__ == "__main__":
     localization = get_localization( asmfiles )
 
     with open( options.output, 'w' ) as outfh:
-        for asmfile in asmfiles:
-            with open( asmfile, 'r' ) as asmfh:
-                writer = csv.writer( outfh, lineterminator="\n")
-                for row in localization:
-                    writer.writerow( map( str, list( row ) ) )
-        
-    # get_localization(asmfiles)
-    # localization = get_localization(
-    #     args, asmfiles, options.repeat, options.smooth
-    # )
-
-    # with open( options.output, 'w' ) as fh:
-    #     writer = csv.writer( fh )
-    #     for row in localization:
-    #         writer.writerow( map( str, list( row ) ) )
+        writer = csv.writer( outfh, lineterminator="\n")
+        for row in localization:
+            writer.writerow( map( str, list( row ) ) )
