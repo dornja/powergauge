@@ -109,11 +109,18 @@ def instreq( instr1, instr2 ):
         op1 = op1.replace( "a", "h", 1 )
     if op2.startswith( "sal" ):
         op2 = op2.replace( "a", "h", 1 )
-
     if op1 == op2:
         return True
     if op1.startswith( op2 ) or op2.startswith( op1 ):
         return True
+    
+    # Special handling for a translation that happens in the blender benchmark
+    if op1.startswith( "mov" ) and op2.startswith( "lea" ):
+        if instr1[1].startswith(instr2[ -1 ][ 1 : -1 ]):
+            return True
+    if op2.startswith( "mov" ) and op1.startswith( "lea" ):
+        if instr2[1].startswith(instr1[ -1 ][ 1 : -1 ]):
+            return True
     return False
 
 def align_functions( f1, f2, name ):
