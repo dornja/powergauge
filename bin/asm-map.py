@@ -90,7 +90,7 @@ synonyms = {
 }
 
 def isnop( instr ):
-    while instr[ 0 ].startswith( "data32" ):
+    while instr[ 0 ].startswith( "data32" ) or instr[ 0 ].startswith( "data16" ):
         instr.pop(0)
     if instr[ 0 ].startswith( "nop" ):
         return True
