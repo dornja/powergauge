@@ -1,19 +1,16 @@
 --program multi.txt
+--rep asm
 --prefix src
 --sanity no
 --single-fitness
 --pos-tests 1
 --neg-tests 0
 --compiler-command ./compile.sh __SOURCE_NAME__
---test-command ./test.py -j 5 mpeg4 __FITNESS_FILE__ --emon 128.143.67.157 9600 1 --cpu 2
+--test-command ./test.py -j 5 mpeg4 __FITNESS_FILE__ --cpu 2 --emon 128.143.67.157 9600 1
 --fix-scheme uniform
 --fault-scheme uniform
 --search gasga
 --num-fitness-samples 35
---eviction-strategy tournament
---fitness-log fitness.csv
 --popsize 512
---generations 512
 --max-evals 65536
 --seed 0
---rep asm

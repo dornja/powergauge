@@ -1,15 +1,16 @@
 --program multi.txt
+--rep asm
 --prefix src
 --sanity no
 --single-fitness
 --pos-tests 1
 --neg-tests 0
 --compiler-command ./compile.sh __SOURCE_NAME__ __EXE_NAME__
---test-command ./test.py -j 7 __EXE_NAME__ large __FITNESS_FILE__
+--test-command ./test.py -j 5 __EXE_NAME__ large __FITNESS_FILE__ --cpu 2 --emon 128.143.67.157 9600 1
 --fix-scheme uniform
 --fault-scheme uniform
---search ssga
---eviction-strategy tournament
+--search gasga
+--num-fitness-samples 35
 --popsize 512
---max-evals 262144
+--max-evals 65536
 --seed 0

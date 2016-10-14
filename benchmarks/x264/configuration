@@ -6,7 +6,7 @@
 --pos-tests 1
 --neg-tests 0
 --compiler-command ./compile.sh __SOURCE_NAME__ __EXE_NAME__
---test-command ./test.py -j 5 __EXE_NAME__ small __FITNESS_FILE__ --cpu 4 --emon 128.143.67.156 9600 1
+--test-command ./test.py -j 5 __EXE_NAME__ medium __FITNESS_FILE__ --cpu 2 --emon 128.143.67.157 9600 1
 --fix-scheme uniform
 --fault-scheme uniform
 --search gasga
