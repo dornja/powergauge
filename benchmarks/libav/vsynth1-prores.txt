@@ -1,9 +1,0 @@
-libavcodec/proresdec.s
-libavcodec/proresdsp.s
-libavcodec/proresenc.s
-libavcodec/x86/proresdsp_init.s
-libavfilter/video.s
-libswscale/input.s
-libswscale/output.s
-libswscale/swscale.s
-libswscale/x86/swscale.s
