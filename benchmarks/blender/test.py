@@ -41,7 +41,7 @@ class BlenderTest( ParallelTest ):
 
     def getCommand( self, outfile ):
         blend, render = {
-            "tiny":   ( [ "inputs/Star-collapse-ntsc.blend" ], [] ),
+            "tiny":   ( [ "inputs/Star-collapse-ntsc.blend" ], [ "--size", "360x240" ] ),
             "small":  ( [ "inputs/buggy2.1.blend" ], [ "--size", "480x270" ] ),
             "medium": ( [ "inputs/BMW27GE.blend" ], [ "--size", "240x135" ] ),
             "large":  ( [ "inputs/Ring_27.blend" ], [ "--size", "256x180" ] ),
