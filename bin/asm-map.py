@@ -34,14 +34,10 @@ else:
         "-o", "--output", metavar = "file", default = "/dev/stdout",
         help = "write profile info to named file"
     )
-    # parser.add_option(
-    #     "-r", "--repeat", metavar = "N", type = int, default = 1,
-    #     help = "run the command N times"
-    # )
-    # parser.add_option(
-    #     "-s", "--smooth", metavar = "width", type = int,
-    #     help = "apply Gaussian smoothing with standard deviation = width"
-    # )
+    parser.add_option(
+        "-i", "--input", metavar = "file", dest="infile", default = "coverage.data",
+        help = "get coverage data from named file"
+    )
     options, args = parser.parse_args()
 
 label    = re.compile( r"^[._A-Za-z0-9]+:" )
@@ -209,7 +205,7 @@ def report_rows( lines, sep = "\t" ):
         count, addr, fun, ins = split(line)
         yield count, addr, fun, ins
         
-def get_metrics( data_file = "coverage.data" ):
+def get_metrics( data_file ):
     # Metrics maps functions to lists of ( count, instruction ) tuples
     metrics = defaultdict( list )
     # STATIC FUNCTIONS BAD, NEED TO FIX
@@ -228,7 +224,7 @@ def get_localization( asmfiles ):
     accum = defaultdict( lambda: 0.0 )
     
     localization = list()
-    metrics = get_metrics()
+    metrics = get_metrics(options.infile)    
     for fname, line, cvg in get_line_coverage( metrics, asmfuns ):
         accum[ fname, line ] += int(cvg)
 
