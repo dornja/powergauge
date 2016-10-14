@@ -38,6 +38,10 @@ else:
         "-i", "--input", metavar = "file", dest="infile", default = "coverage.data",
         help = "get coverage data from named file"
     )
+    parser.add_option(
+        "-s", "--source-dir", metavar = "directory", dest="source_dir",
+        help = "directory containing the source files"
+    )
     options, args = parser.parse_args()
 
 label    = re.compile( r"^[._A-Za-z0-9]+:" )
@@ -166,7 +170,13 @@ def get_line_coverage( metrics, asmfuns ):
                 yield fname, line, cvg
 
 def assembly_instrs( fname ):
-    with open( fname ) as fh:
+    floc = fname
+    if options.source_dir is not None:
+        if options.source_dir[ -1 ] != "/":
+            floc = options.source_dir + "/" + fname
+        else:
+            floc = options.source_dir + fname
+    with open( floc ) as fh:
         fun = None
         linenum = 0
         for line in fh:
