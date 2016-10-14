@@ -5,29 +5,11 @@ repair.debug.*
 
 repair/
 
-benchmarks/blackscholes/inputs
-benchmarks/blackscholes/outputs
+benchmarks/*/inputs
+benchmarks/*/outputs
+benchmarks/*/src
 benchmarks/blender/build
-benchmarks/blender/inputs
 benchmarks/blender/multi.txt
-benchmarks/blender/outputs
-benchmarks/blender/src
-benchmarks/bodytrack/inputs
-benchmarks/bodytrack/outputs
-benchmarks/bodytrack/src
-benchmarks/ferret/inputs
-benchmarks/ferret/outputs
-benchmarks/ferret/src
-benchmarks/fluidanimate/inputs
-benchmarks/fluidanimate/outputs
-benchmarks/fluidanimate/src
-benchmarks/freqmine/inputs
-benchmarks/freqmine/outputs
-benchmarks/freqmine/src
-benchmarks/vips/inputs
-benchmarks/vips/outputs
-benchmarks/vips/src
-benchmarks/x264/inputs
-benchmarks/x264/outputs
-benchmarks/x264/src
+bin/limit
+bin/getcpu
 pintool/obj-*
