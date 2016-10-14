@@ -53,6 +53,7 @@ else
     rsync -av "$prefix/src/" "$tmp"
 
     cd "$tmp"
+    patch -p5 < "$cwd/double-free.patch" || exit $?
     ./configure || exit $?
 
     srcs="
