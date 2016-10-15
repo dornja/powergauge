@@ -1,0 +1,9 @@
+# @configure_input@
+
+diff-img: CPPFLAGS := @CPPFLAGS@ $(CPPFLAGS)
+diff-img: CXXFLAGS := @CXXFLAGS@ $(CXXFLAGS)
+diff-img: LDFLAGS  := @LDFLAGS@ $(LDFLAGS)
+diff-img: LDLIBS   := -lm @LIBS@ $(LDLIBS)
+diff-img: config.h
+diff-img:
+

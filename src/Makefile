@@ -7,10 +7,22 @@ CFLAGS=-O3
 all:
 all: $(root)/../bin/limit
 all: $(root)/../bin/getcpu
+all: $(root)/../bin/diff-img
 
 $(root)/../bin/%: %.c
 	@$(MAKE) --no-print-directory $*
 	mv $* $@
+
+$(root)/../bin/diff-img: diff-img-src/diff-img.cpp diff-img-src/Makefile
+	$(MAKE) -C diff-img-src
+	mv diff-img-src/diff-img $@
+
+diff-img-src/Makefile: diff-img-src/configure
+	cd $(dir $@) && ./configure
+
+diff-img-src/configure: diff-img-src/configure.ac diff-img-src/Makefile.in
+	cd $(dir $@) && autoreconf
+	-cd $(dir $@) && automake --add-missing
 
 arduino: power-meter power-meter/read-meter
 
