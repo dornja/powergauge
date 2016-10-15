@@ -83,7 +83,8 @@ parse_args( int argc, char ** argv )
         else if ( arg == "-r" )
             opt.recursive = true;
         else if ( arg == "--thresh" ) {
-            std::stringstream val( *( ++argv ) );
+            --argc; ++argv;
+            std::stringstream val( *argv );
             val >> opt.thresh;
 #if cimg_display != 0
         } else if ( arg == "-v" ) {
