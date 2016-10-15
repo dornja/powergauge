@@ -260,6 +260,14 @@ class ParallelTest:
     def getGolden( self ):
         return "outputs/%s%s" % ( self.size, self.getOutputSuffix() )
 
+    def diff( self, golden, actual ):
+        with open( "/dev/null", 'w' ) as null:
+            Multitmp.check_call(
+                [ "diff", "-r", golden, actual ],
+                stdout = null, stderr = null, verbose = self.options.verbose
+            )
+        return True
+
     def validateCorrectness( self, outfile ):
         golden = self.getGolden()
 
@@ -286,19 +294,13 @@ class ParallelTest:
                 raise IOError( 2, "No such file or directory", golden )
 
         try:
-            with open( "/dev/null", 'w' ) as null:
-                Multitmp.check_call(
-                    [ "diff", "-r", outfile, golden ],
-                    stdout = null, stderr = null, verbose = self.options.verbose
-                )
+            return self.diff( golden, outfile )
         except Exception as e:
             if new_golden:
                 check_call( [ "rm", "-rf", golden ] )
             if isinstance( e, CalledProcessError ):
                 return False
             raise
-
-        return True
 
     def getParser( self ):
         return OptionParser(
