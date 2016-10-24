@@ -3,6 +3,7 @@
 from collections import namedtuple
 import csv
 import heapq
+from math import floor
 from optparse import OptionParser
 import re
 import sys
@@ -48,36 +49,87 @@ if options.sort:
 Entry = namedtuple( "Entry", "gen fitness interval variant" )
 DiffEntry = namedtuple( "DiffEntry", "delta evalno fitness interval variant" )
 
-def getEntries( linesrc ):
-    # A pattern for floating point numbers. This appears a couple times in the
-    # variant pattern, so I made a separate string to interpolate in instead of
-    # copying it verbatim and making a single extra-long pattern. Note that the
-    # pattern here does not capture any groups: the (?:) glyph indicates a
-    # non-capturing group in python.
+class parser:
+    def __init__( self, stream, max_evals = None ):
+        self.CONFIG  = 0x1
+        self.DEBUG   = 0x2
+        self.FITNESS = 0x4
 
-    f = r"-?(?:(?:\d+(?:\.\d+)?(?:[eE]-?\d+)?)|inf)"
-    variant_pat = re.compile(
-        r"^\t\s*({0})\s+(?:\+/-\s+({0})\s+)?(.*)".format( f )
-    )
-    generation_pat = re.compile( r"generation (\d+) " )
+        self.stream = self._getLine( stream )
+        self.max_evals = max_evals
+        self.fitness = list()
+        self.config = list()
+        self.debug = list()
 
-    count = 0
-    gen = 0
-    for line in linesrc:
-        m = variant_pat.search( line )
-        if m is not None:
-            fitness = float( m.group( 1 ) )
-            interval = 0.0 if m.group( 2 ) is None else float( m.group( 2 ) )
-            variant = m.group( 3 )
-            yield Entry( gen, fitness, interval, variant )
-            count += 1
-            if options.stop_after is not None and count >= options.stop_after:
+        next( self.stream )
+
+    def _getLine( self, stream ):
+        go_until = self.CONFIG | self.DEBUG | self.FITNESS
+
+        # A pattern for floating point numbers. This appears a couple times in
+        # the variant pattern, so I made a separate string to interpolate in
+        # instead of copying it verbatim and making a single extra-long pattern.
+        # Note that the pattern here does not capture any groups: the (?:) glyph
+        # indicates a non-capturing group in python.
+
+        f = r"-?(?:(?:\d+(?:\.\d+)?(?:[eE]-?\d+)?)|inf)"
+        variant_pat = re.compile(
+            r"^\t\s*({0})\s+(?:\+/-\s+({0})\s+)?(.*)".format( f )
+        )
+        generation_pat = re.compile( r"generation (\d+) " )
+
+        gen = 0
+        for line in stream:
+            m = variant_pat.search( line )
+            if m is not None:
+                fitness = float( m.group( 1 ) )
+                interval = 0.0 if m.group( 2 ) is None else float( m.group( 2 ) )
+                variant = m.group( 3 )
+                self.fitness.append( Entry( gen, fitness, interval, variant ) )
+                if go_until & self.FITNESS != 0:
+                    go_until = yield
+                continue
+            m = generation_pat.search( line )
+            if m is not None:
+                gen = int( m.group( 1 ) )
+                continue
+            if line.startswith( "--" ):
+                self.config.append( line.split( None, 1 ) )
+                if go_until & self.CONFIG != 0:
+                    go_until = yield
+                continue
+            self.debug.append( line )
+            if go_until & self.DEBUG != 0:
+                go_until = yield
+
+    def _consumer( self, queue, key ):
+        flipped = list()
+        while True:
+            while len( flipped ) > 0:
+                yield flipped.pop()
+            flipped = list( reversed( queue ) )
+            del queue[ : ]
+            if len( flipped ) == 0:
+                try:
+                    self.stream.send( key )
+                except StopIteration:
+                    break
+
+    def getConfig( self ):
+        for entry in self._consumer( self.config, self.CONFIG ):
+            yield entry
+
+    def getDebug( self ):
+        for entry in self._consumer( self.debug, self.DEBUG ):
+            yield entry
+
+    def getEntries( self ):
+        count = 0
+        for entry in self._consumer( self.fitness, self.FITNESS ):
+            if self.max_evals is not None and self.max_evals <= count:
                 break
-            continue
-        m = generation_pat.search( line )
-        if m is not None:
-            gen = int( m.group( 1 ) )
-            continue
+            yield entry
+            count += 1
 
 numEntries = 0
 original   = None
@@ -179,7 +231,8 @@ try:
     writer.writerow( header )
 
     with open( args[ 0 ] ) as fh:
-        source = statsFilter( getEntries( fh ) )
+        p = parser( fh )
+        source = statsFilter( p.getEntries() )
         if options.filter == "best":
             source = bestFilter( source )
         if options.filter == "steps":
@@ -206,6 +259,29 @@ finally:
     out.close()
 
 if options.csv is None:
+    genprog_ver = None
+    duration = None
+    for line in p.getDebug():
+        if line.startswith( "GenProg Version" ):
+            genprog_ver = line.split( None, 2 )[ 2 ]
+        if line.startswith( "Wall-Clock Seconds Elapsed" ):
+            duration = list()
+            secs = float( line.split()[ -1 ] )
+            days = int( floor( secs / 86400 ) )
+            if days > 0:
+                duration.append( "%dd" % days )
+                secs -= days * 86400
+            hours = int( floor( secs / 3600 ) )
+            if days > 0 or hours > 0:
+                duration.append( "%dh" % hours )
+                secs -= hours * 3600
+            mins = int( floor( secs / 60 ) )
+            if days > 0 or hours > 0 or mins > 0:
+                duration.append( "%dm" % mins )
+                secs = secs - mins * 60
+            duration.append( "%gs" % secs )
+            duration = " ".join( duration )
+
     if original is not None:
         print "original fitness:   ", original.fitness
     print "best fitness:       ", getBest().fitness
@@ -219,4 +295,5 @@ if options.csv is None:
         print "energy improvement:  %2.4g%%" % ( ( 1 - ( best_energy / orig_energy ) ) * 100 )
     print "variants considered:", numEntries
     print "unique variants:    ", len( unique )
-
+    print "GenProg version:    ", genprog_ver
+    print "Search duration:    ", duration
