@@ -12,7 +12,7 @@ parser.add_option(
     "--csv", metavar = "file", help = "write generations to csv file"
 )
 parser.add_option(
-    "--filter", metavar = "alg", choices = ( "regression", "steps", ),
+    "--filter", metavar = "alg", choices = ( "best", "regression", "steps", ),
     help = "only include a subset of variants"
 )
 parser.add_option(
@@ -39,6 +39,8 @@ if len( args ) < 1:
     parser.print_help()
     exit()
 
+if options.filter == "best":
+    options.final = True
 if options.sort:
     options.filter = "steps"
     options.final = True
@@ -110,6 +112,21 @@ def getBest():
         return best[ 0 ][ -1 ]
     return None
 
+def bestFilter( entries ):
+    for entry in entries:
+        pass
+    nbest = list()
+    top = getBest()
+    current = top
+    while current is not None and \
+            ( current.fitness + current.interval >= top.fitness - top.interval ):
+        nbest.append( current )
+        heapq.heappop( best )
+        current = getBest()
+    nbest.sort( key = lambda e: ( len( e.variant.split() ), -e.fitness ) )
+    for entry in nbest:
+        yield entry
+
 def regressionFilter( entries ):
     pending = list()
     for entry in entries:
@@ -163,6 +180,8 @@ try:
 
     with open( args[ 0 ] ) as fh:
         source = statsFilter( getEntries( fh ) )
+        if options.filter == "best":
+            source = bestFilter( source )
         if options.filter == "steps":
             source = stepsFilter( source )
         if options.final:
