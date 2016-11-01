@@ -108,8 +108,10 @@ class DDGenome( DD ):
                     result = self.UNRESOLVED
             else:
                 try:
-                    fitness = self.genprog.run_test( exe )[ 0 ]
-                    result = self.FAIL if fitness == 0.0 else self.PASS
+                    result = self.PASS
+                    for line in self.genprog.run_test( exe ):
+                        if line[ 0 ] == 0.0:
+                            result = self.FAIL
                 except CalledProcessError:
                     fitness = "test failure"
                     result = self.FAIL

@@ -1,7 +1,9 @@
+from __future__ import division
+
 import csv
 from distutils.spawn import find_executable
 from itertools import repeat
-from math import factorial, pi, sqrt
+from math import gamma, pi, sqrt
 from optparse import OptionGroup, OptionParser
 import os
 import platform
@@ -19,9 +21,6 @@ def reduce_error( f, alpha, probes = 5 ):
     # correction computation adapted from:
     # https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
 
-    # The correction below is for odd numbers of probes. Rather than coding
-    # up both corrections, we just force the number of probes to be odd.
-
     if probes % 2 == 0:
         probes += 1
 
@@ -34,22 +33,24 @@ def reduce_error( f, alpha, probes = 5 ):
     errp = 1.0
 
     while alpha < errp:
-        for i in range( probes ):
-            x = f()
-            if log is not None:
-                infomsg( x, file = log )
-            yield x
-            n = n + 1
-            delta = x - mean
-            mean = mean + delta / n
-            M2 = M2 + delta * ( x - mean )
+        infomsg( "errp =", errp, ": Attempting", probes, "more probes" )
+        i = 0
+        while i < probes:
+            for x in f():
+                if log is not None:
+                    infomsg( x, file = log )
+                yield x
+                n = n + 1
+                delta = x - mean
+                mean = mean + delta / n
+                M2 = M2 + delta * ( x - mean )
+                i = i + 1
         var = M2 / ( n - 1 )
         if var == 0:
             break
         errp = sqrt( var / n ) / mean
         if n < 100:
-            k = n // 2
-            c4 = sqrt( pi / k ) * factorial ( 2*k-1 ) / ( 2 ** ( 2*k-1 ) * factorial( k - 1 ) ** 2 )
+            c4 = sqrt( 2 / ( n - 1 ) ) * gamma( n / 2 ) / gamma( ( n - 1 ) / 2 )
             errp = errp / c4
 
         probes += probes

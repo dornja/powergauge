@@ -150,9 +150,10 @@ class DDGenome( DD ):
                     cache[ key ] = list()
                 return list()
             def tester():
-                fitness = list( self.genprog.run_test( exe ) )[ 0 ]
-                infomsg( "   ", fitness )
-                return fitness
+                for line in self.genprog.run_test( exe ):
+                    fitness = line[ 0 ]
+                    infomsg( "   ", fitness )
+                    yield fitness
             fitness = list()
             for value in reduce_error( tester, options.low_error, 20 ):
                 if value == 0:
