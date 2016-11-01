@@ -22,13 +22,13 @@ class LibavTest( ParallelTest ):
     def getCommand( self, outfile ):
         cmd = [ self.exe ]
         cmd += {
-            "prores":   ['fate-vsynth1-prores', 
+            "jpegls":   ['fate-vsynth1-jpegls', 
                          '',
                          '',
                          root + '/benchmarks/libav/libav-src',
-                         """enc_dec "rawvideo -s 352x288 -pix_fmt yuv420p" tests/data/vsynth1.yuv mov "-c prores -profile hq" rawvideo "-s 352x288 -pix_fmt yuv420p " -keep""",
+                         """enc_dec "rawvideo -s 352x288 -pix_fmt yuv420p" tests/data/vsynth1.yuv avi "-c jpegls -sws_flags neighbor+full_chroma_int" rawvideo "-s 352x288 -pix_fmt yuv420p -sws_flags area" -keep""",
                          '',
-                         'genprog-tests/ref/vsynth/vsynth1-prores',
+                         'genprog-tests/ref/vsynth/vsynth1-jpegls',
                          '',
                          '1',
                          '',
