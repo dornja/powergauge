@@ -245,9 +245,9 @@ with get_cache() as cache:
     else:
         deltas = brute_force( dd, deltas )
     infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
-    base = dd.get_fitness( [] )
-    optim = dd.get_fitness( deltas )
-    infomsg( "improvement:", 1 - np.mean( base ) / np.mean( optim ) )
+    base = 1 / np.mean( dd.get_fitness( [] ) ) - 1
+    optim = 1 / np.mean( dd.get_fitness( deltas ) ) - 1
+    infomsg( "improvement:", 1 - optim / base )
 
 if options.save_binary is not None or options.save_sources is not None:
     with builder.build( deltas ) as exe:
