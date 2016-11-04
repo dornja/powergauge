@@ -79,9 +79,13 @@ class parser:
         generation_pat = re.compile( r"generation (\d+) " )
 
         gen = 0
+        count = 0
         for line in stream:
             m = variant_pat.search( line )
             if m is not None:
+                if options.stop_after is not None and options.stop_after < count:
+                    continue
+                count += 1
                 fitness = float( m.group( 1 ) )
                 interval = 0.0 if m.group( 2 ) is None else float( m.group( 2 ) )
                 variant = m.group( 3 )
@@ -132,17 +136,21 @@ class parser:
             count += 1
 
 numEntries = 0
+zeros      = 0
 original   = None
 best       = list()
 unique     = dict()
 def statsFilter( entries ):
     global numEntries
     global original
+    global zeros
 
     for entry in entries:
         numEntries += 1
         if entry.variant == "original":
             original = entry
+        if entry.fitness == 0:
+            zeros += 1
 
         # Heap key uses negative fitness because heapq provides a minheap. Thus
         # the most negative key will be first, which corresponds to the largest
@@ -283,17 +291,18 @@ if options.csv is None:
             duration = " ".join( duration )
 
     if original is not None:
-        print "original fitness:   ", original.fitness
-    print "best fitness:       ", getBest().fitness
+        print "original fitness:     ", original.fitness
+    print "best fitness:         ", getBest().fitness
     if original is not None:
         # Convert from fitness to energy
         orig_energy = ( 1 / original.fitness ) - 1
         best_energy = ( 1 / getBest().fitness ) - 1
-        print "original energy:    ", orig_energy
-        print "best energy:        ", best_energy
-        print "fitness improvement: %2.4g%%" % ( ( ( getBest().fitness - original.fitness ) / original.fitness ) * 100 )
-        print "energy improvement:  %2.4g%%" % ( ( 1 - ( best_energy / orig_energy ) ) * 100 )
-    print "variants considered:", numEntries
-    print "unique variants:    ", len( unique )
-    print "GenProg version:    ", genprog_ver
-    print "Search duration:    ", duration
+        print "original energy:      ", orig_energy
+        print "best energy:          ", best_energy
+        print "fitness improvement:   %2.4g%%" % ( ( ( getBest().fitness - original.fitness ) / original.fitness ) * 100 )
+        print "energy improvement:    %2.4g%%" % ( ( 1 - ( best_energy / orig_energy ) ) * 100 )
+    print "variants considered:  ", numEntries
+    print "unique variants:      ", len( unique )
+    print "zero-fitness variants:", zeros
+    print "GenProg version:      ", genprog_ver
+    print "Search duration:      ", duration
