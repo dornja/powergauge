@@ -148,10 +148,18 @@ if os.path.exists( imprv_file ):
             improvement[ row[ "inputs" ] ] = row[ "improvement" ]
 improvement.pop( " ".join( options.inputs ), None )
 
+def get_improvement( logfile ):
+    with open( log ) as fh:
+        for line in fh:
+            if line.startswith( "improvement:" ):
+                result = line.split()[ -1 ]
+    return result
+
 infomsg( "INFO: minimizing for", test_input )
-with mktemp() as log:
+with mktemp() as min_config:
+    check_call( [ "cp", options.config, min_config ] )
     min_cmd = [
-        minimize, genprog, options.config,
+        minimize, genprog, min_config,
             "--genome-file", genomes[ -1 ],
             "--save-binary", min_binary,
             "--save-genome", min_genome,
@@ -160,12 +168,32 @@ with mktemp() as log:
     ]
     if options.low_error is not None:
         min_cmd += [ "--low-error", str( options.low_error ) ]
-    pipeline( [ min_cmd , [ "tee", log ] ] )
-
-    with open( log ) as fh:
-        for line in fh:
-            if line.startswith( "improvement:" ):
-                improvement[ " ".join( options.inputs ) ] = line.split()[ -1 ]
+    if len( options.inputs ) != 0 and \
+            ( len( options.inputs ) != 1 or options.inputs[ 0 ] != test_input ):
+        check_call( min_cmd )
+        min_cmd = [
+            minimize, genprog, min_config,
+                "--search", "none",
+                "--genome-file", min_genome
+        ]
+        if options.low_error is not None:
+            min_cmd += [ "--low-error", str( options.low_error ) ]
+        results = dict()
+        for size in options.inputs:
+            infomsg( "using --test-command", prefix + size + suffix )
+            infomsg( "minimize:", min_cmd )
+            with open( min_config, 'a' ) as fh:
+                infomsg( "--test-command", prefix + size + suffix, file = fh)
+            with mktemp() as log:
+                pipeline( [ min_cmd, [ "tee", log ] ] )
+                results[ size ] = get_improvement( log )
+        improvement[ " ".join( options.inputs ) ] = str(
+            sum( [ float( x ) for x in results.values() ] ) / len( results )
+        )
+    else:
+        with mktemp() as log:
+            pipeline( [ min_cmd , [ "tee", log ] ] )
+            improvement[ " ".join( options.inputs ) ] = get_improvement( log )
 with open( imprv_file, 'w' ) as fh:
     writer = csv.writer( fh )
     writer.writerow( [ "improvement", "inputs" ] )

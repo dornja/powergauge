@@ -41,7 +41,7 @@ parser.add_option(
 )
 parser.add_option(
     "--search", metavar = "alg",
-    choices = ( "delta", "brute" ), default = "delta",
+    choices = ( "delta", "brute", "none" ), default = "delta",
     help = "algorithm for minimizing the deltas"
 )
 parser.add_option(
@@ -234,7 +234,9 @@ with get_cache() as cache:
     deltas, builder = get_builder( deltas )
     infomsg( "found", len( deltas ), "deltas" )
     dd = DDGenome( genprog, builder, deltas )
-    if options.search == "delta":
+    if options.search == "brute":
+        deltas = brute_force( dd, deltas )
+    elif options.search == "delta":
         try:
             deltas = dd.ddmin( deltas )
         except AssertionError:
@@ -242,8 +244,11 @@ with get_cache() as cache:
                 raise
             else:
                 deltas = list()
+    elif options.search == "none":
+        pass
     else:
-        deltas = brute_force( dd, deltas )
+        infomsg( "ERROR: unexpected search algorithm:", options.search )
+        exit( 2 )
     infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
     base = dd.get_fitness( [] )
     optim = dd.get_fitness( deltas )
