@@ -83,7 +83,7 @@ class parser:
         for line in stream:
             m = variant_pat.search( line )
             if m is not None:
-                if options.stop_after is not None and options.stop_after < count:
+                if options.stop_after is not None and options.stop_after <= count:
                     continue
                 count += 1
                 fitness = float( m.group( 1 ) )
