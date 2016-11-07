@@ -233,25 +233,29 @@ else:
 with get_cache() as cache:
     deltas, builder = get_builder( deltas )
     infomsg( "found", len( deltas ), "deltas" )
-    dd = DDGenome( genprog, builder, deltas )
-    if options.search == "brute":
-        deltas = brute_force( dd, deltas )
-    elif options.search == "delta":
-        try:
-            deltas = dd.ddmin( deltas )
-        except AssertionError:
-            if dd.test([]) == dd.PASS:
-                raise
-            else:
-                deltas = list()
-    elif options.search == "none":
-        pass
+    if len( deltas ) == 0:
+        base = 1
+        optim = 1
     else:
-        infomsg( "ERROR: unexpected search algorithm:", options.search )
-        exit( 2 )
-    infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
-    base = dd.get_fitness( [] )
-    optim = dd.get_fitness( deltas )
+        dd = DDGenome( genprog, builder, deltas )
+        if options.search == "brute":
+            deltas = brute_force( dd, deltas )
+        elif options.search == "delta":
+            try:
+                deltas = dd.ddmin( deltas )
+            except AssertionError:
+                if dd.test([]) == dd.PASS:
+                    raise
+                else:
+                    deltas = list()
+        elif options.search == "none":
+            pass
+        else:
+            infomsg( "ERROR: unexpected search algorithm:", options.search )
+            exit( 2 )
+        infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
+        base = dd.get_fitness( [] )
+        optim = dd.get_fitness( deltas )
     infomsg( "improvement:", 1 - np.mean( base ) / np.mean( optim ) )
 
 if options.save_binary is not None or options.save_sources is not None:
