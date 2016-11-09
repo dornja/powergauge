@@ -6,7 +6,7 @@ from glob import glob
 from optparse import OptionParser
 import os
 import shlex
-from subprocess import call, check_call
+from subprocess import call, check_call, CalledProcessError
 import sys
 import tempfile
 
@@ -22,12 +22,16 @@ from util import infomsg, mktemp, pipeline
 
 parser = OptionParser( usage = "%prog [options] genprog results-dir" )
 parser.add_option(
-    "--best", metavar = "csv",
-    help = "use the named CSV file to cache search results"
+    "--all-variants", action = "store_true",
+    help = "process all variants in the --logfile accepted by the --filter"
 )
 parser.add_option(
     "--config", metavar = "file",
     help = "read test-command from given config file"
+)
+parser.add_option(
+    "--filter", metavar = "alg", default = "best",
+    help = "algorithm for filtering variants from search"
 )
 parser.add_option(
     "-f", "--force", action = 'store_true', help = "overwrite existing files"
@@ -42,6 +46,14 @@ parser.add_option(
 parser.add_option(
     "--low-error", metavar = "p", type = float,
     help = "repeat measurements until (standard error / mean) < (1+p)"
+)
+parser.add_option(
+    "--search-csv", metavar = "csv",
+    help = "use the named CSV file to cache search results"
+)
+parser.add_option(
+    "--skip-minimize", action = "store_true",
+    help = "do not minimize the genome before estimating improvement"
 )
 parser.add_option(
     "--stop-after", metavar = "N", type = int,
@@ -167,7 +179,7 @@ def parse_log( infile, outfile ):
     infomsg( "INFO: parsing", infile )
     cmd = [
         parselog, infile,
-            "--filter", "best",
+            "--filter", options.filter,
             "--final",
             "--csv", outfile
     ]
@@ -190,7 +202,7 @@ def get_genomes( csvfile ):
     return [ ( i, g ) for _, _, i, g in sorted( genomes ) ]
 
 def get_improvement( logfile ):
-    with open( log ) as fh:
+    with open( logfile ) as fh:
         for line in fh:
             if line.startswith( "improvement:" ):
                 result = line.split()[ -1 ]
@@ -206,176 +218,144 @@ test_cmd = TestCmd( configfile if options.config is None else options.config )
 # Get the best genomes from the search...
 ########
 
-if options.best is None or not os.path.exists( options.best ):
+if options.search_csv is None or not os.path.exists( options.search_csv ):
     if options.logfile is None:
         logfiles = glob( os.path.join( results, "repair.debug.*" ) )
         if len( logfiles ) != 1:
             infomsg(
                 "ERROR: could not identify logfile. Use --logfile to specify"
             )
+            for fname in logfiles:
+                infomsg( "   ", fname )
             exit( 1 )
         options.logfile = logfiles[ 0 ]
-    if options.best is None:
+    if options.search_csv is None:
         with mktemp() as csvfile:
             parse_log( options.logfile, csvfile )
             genomes = get_genomes( csvfile )
     else:
-        parse_log( options.logfile, options.best )
-        genomes = get_genomes( options.best )
+        parse_log( options.logfile, options.search_csv )
+        genomes = get_genomes( options.search_csv )
 else:
-    genomes = get_genomes( options.best )
+    genomes = get_genomes( options.search_csv )
 if len( genomes ) == 0:
     infomsg(
         "ERROR: no variants found! Is %s a valid file?" %
-            options.logfile if options.best is None else options.best
+            options.logfile if options.search_csv is None else options.search_csv
     )
     exit( 1 )
 
-# for now, we always operate on the genome with the greated estimated fitness
-
-best = genomes[ 0 ]
+def process_genome( best ):
 
 ########
 # Write the genome to disk so that minimize and maximize can use it
 ########
 
-if options.stop_after is None:
-    genome = "genome.%d" % best[ 0 ]
-else:
-    genome = "genome.%d-%d" % ( options.stop_after, best[ 0 ] )
-this_genome = os.path.join( results, genome ) + ".orig"
-if not os.path.exists( this_genome ) or options.force:
-    infomsg( "INFO: saving genome to", this_genome )
-    with open( this_genome, 'w' ) as fh:
-        infomsg( " ".join( lower_genome( best[ 1 ].split() ) ), file = fh )
+    if options.stop_after is None:
+        genome = "genome.%d" % best[ 0 ]
+    else:
+        genome = "genome.%d-%d" % ( options.stop_after, best[ 0 ] )
+    this_genome = os.path.join( results, genome ) + ".orig"
+    if not os.path.exists( this_genome ) or options.force:
+        infomsg( "INFO: saving genome to", this_genome )
+        with open( this_genome, 'w' ) as fh:
+            infomsg( " ".join( lower_genome( best[ 1 ].split() ) ), file = fh )
 
 ########
 # Maximize the genome for all inputs
 ########
 
-if len( options.inputs ) > 0:
-    infomsg( "INFO: maximizing genome for inputs:", *options.inputs )
-with saving( "multi.cache" ):
-    for test_input in options.inputs:
-        next_genome = this_genome + "." + test_input
-        if not os.path.exists( next_genome ) or options.force:
-            with mkconfig( test_cmd( test_input ) ) as config:
-                check_call( [
-                    maximize, genprog, config,
-                        "--genome-file", this_genome,
-                        "--save-genome", next_genome
-                ] )
-        with open( '/dev/null', 'w' ) as null:
-            status = call(
-                [ "diff", this_genome, next_genome ],
-                stdout = null, stderr = null
-            )
-            if status != 0:
-                this_genome = next_genome
-    infomsg( "INFO: final genome stored at", this_genome )
+    if len( options.inputs ) > 0:
+        infomsg( "INFO: maximizing genome for inputs:", *options.inputs )
+    with saving( "multi.cache" ):
+        for test_input in options.inputs:
+            next_genome = this_genome + "." + test_input
+            if not os.path.exists( next_genome ) or options.force:
+                with mkconfig( test_cmd( test_input ) ) as config:
+                    check_call( [
+                        maximize, genprog, config,
+                            "--genome-file", this_genome,
+                            "--save-genome", next_genome
+                    ] )
+            with open( '/dev/null', 'w' ) as null:
+                status = call(
+                    [ "diff", this_genome, next_genome ],
+                    stdout = null, stderr = null
+                )
+                if status != 0:
+                    this_genome = next_genome
+        infomsg( "INFO: final genome stored at", this_genome )
 
 ########
 # Minimize the genome for the original input
 ########
 
-    min_genome = this_genome + ".min"
-    min_binary = min_genome + ".bin"
-    min_source = min_genome + ".src"
-    if options.force or any(
-            [not os.path.exists(f) for f in [min_genome, min_binary, min_source]]
-        ):
-        with mkconfig( test_cmd ) as config:
-            cmd = [
-                minimize, genprog, config,
-                    "--genome-file", this_genome,
-                    "--save-binary", min_binary,
-                    "--save-genome", min_genome,
-                    "--save-sources", min_source
-            ]
-            if options.low_error is not None:
-                cmd += [ "--low-error", str( options.low_error ) ]
-            infomsg( " ".join( cmd ) )
-            check_call( cmd )
-    this_genome = min_genome
+        if not options.skip_minimize:
+            min_genome = this_genome + ".min"
+            min_binary = min_genome + ".bin"
+            min_source = min_genome + ".src"
+            fnames = [ min_genome, min_binary, min_source ]
+            if options.force or any(
+                    [ not os.path.exists( f ) for f in fnames ]
+                ):
+                with mkconfig( test_cmd ) as config:
+                    cmd = [
+                        minimize, genprog, config,
+                            "--genome-file", this_genome,
+                            "--save-binary", min_binary,
+                            "--save-genome", min_genome,
+                            "--save-sources", min_source
+                    ]
+                    if options.low_error is not None:
+                        cmd += [ "--low-error", str( options.low_error ) ]
+                    check_call( cmd )
+            this_genome = min_genome
 
 ########
 # Measure the improvement over the original
 ########
 
-    if test_cmd.getInput() not in options.inputs:
-        options.inputs = [ test_cmd.getInput() ] + options.inputs
-    genome = os.path.basename( this_genome )
-    with ImprovementTable( os.path.join( results, "improvement" ) ) as imprv:
-        for test_input in options.inputs:
-            if not options.force and ( genome, test_input ) in imprv:
-                continue
-            with mkconfig( test_cmd( test_input ) ) as config:
-                cmd = [
-                    minimize, genprog, config,
-                        "--search", "none",
-                        "--genome-file", this_genome
-                ]
-                if options.low_error is not None:
-                    min_cmd += [ "--low-error", str( options.low_error ) ]
-                with mktemp() as log:
-                    pipeline( [ cmd, [ "tee", log ] ] )
-                    imprv[ genome, test_input ] = get_improvement( log )
-exit()
+        if options.stop_after is None:
+            cache = lambda i: os.path.join(
+                results, "genome.%s-%s.cache" % ( options.filter, i )
+            )
+        else:
+            cache = lambda i: os.path.join(
+                results, "genome.%d-%s-%s.cache" % (
+                    options.stop_after, options.filter, i
+                )
+            )
+        inputs = options.inputs
+        if test_cmd.getInput() not in inputs:
+            inputs = [ test_cmd.getInput() ] + inputs
+        genome_key = os.path.basename( this_genome )
+        with ImprovementTable( os.path.join( results, "improvement" ) ) as imprv:
+            for test_input in inputs:
+                if not options.force and ( genome_key, test_input ) in imprv:
+                    continue
+                with mkconfig( test_cmd( test_input ) ) as config:
+                    cmd = [
+                        minimize, genprog, config,
+                            "--search", "none",
+                            "--genome-file", this_genome,
+                    ]
+                    if not options.force:
+                        cmd += [ "--cache", cache( test_input ) ]
+                    if options.low_error is not None:
+                        min_cmd += [ "--low-error", str( options.low_error ) ]
+                    with mktemp() as log:
+                        try:
+                            pipeline( [ cmd, [ "tee", log ] ] )
+                        except CalledProcessError:
+                            if ( genome_key, test_input ) in imprv:
+                                del imprv[ genome_key, test_input ]
+                            continue
+                        imprv[ genome_key, test_input ] = get_improvement( log )
 
-for dst in [ min_binary, min_genome, min_source ]:
-    if os.path.exists( dst ):
-        check_call( [ "rm", "-rf", dst ] )
-
-improvement = dict()
-if os.path.exists( imprv_file ):
-    with open( imprv_file ) as fh:
-        reader = csv.DictReader( fh )
-        for row in reader:
-            improvement[ row[ "inputs" ] ] = row[ "improvement" ]
-improvement.pop( " ".join( options.inputs ), None )
-
-infomsg( "INFO: minimizing for", test_input )
-with mktemp() as min_config:
-    check_call( [ "cp", options.config, min_config ] )
-    min_cmd = [
-        minimize, genprog, min_config,
-            "--genome-file", genomes[ -1 ],
-            "--save-binary", min_binary,
-            "--save-genome", min_genome,
-            "--save-sources", min_source,
-            "--cache", genomes[ 0 ] + ".cache"
-    ]
-    if options.low_error is not None:
-        min_cmd += [ "--low-error", str( options.low_error ) ]
-    if len( options.inputs ) != 0 and \
-            ( len( options.inputs ) != 1 or options.inputs[ 0 ] != test_input ):
-        check_call( min_cmd )
-        min_cmd = [
-            minimize, genprog, min_config,
-                "--search", "none",
-                "--genome-file", min_genome
-        ]
-        if options.low_error is not None:
-            min_cmd += [ "--low-error", str( options.low_error ) ]
-        results = dict()
-        for size in options.inputs:
-            infomsg( "using --test-command", prefix + size + suffix )
-            infomsg( "minimize:", min_cmd )
-            with open( min_config, 'a' ) as fh:
-                infomsg( "--test-command", prefix + size + suffix, file = fh)
-            with mktemp() as log:
-                pipeline( [ min_cmd, [ "tee", log ] ] )
-                results[ size ] = get_improvement( log )
-        improvement[ " ".join( options.inputs ) ] = str(
-            sum( [ float( x ) for x in results.values() ] ) / len( results )
-        )
-    else:
-        with mktemp() as log:
-            pipeline( [ min_cmd , [ "tee", log ] ] )
-            improvement[ " ".join( options.inputs ) ] = get_improvement( log )
-with open( imprv_file, 'w' ) as fh:
-    writer = csv.writer( fh )
-    writer.writerow( [ "improvement", "inputs" ] )
-    for key in sorted( improvement ):
-        writer.writerow( [ improvement[ key ], key ] )
+if options.all_variants:
+    for i, genome in enumerate( genomes ):
+        infomsg( "INFO: evaluating variant %d of %d" % ( i+1, len( genomes ) ) )
+        process_genome( genome )
+else:
+    process_genome( genomes[ 0 ] )
 

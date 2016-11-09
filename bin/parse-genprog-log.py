@@ -13,7 +13,8 @@ parser.add_option(
     "--csv", metavar = "file", help = "write generations to csv file"
 )
 parser.add_option(
-    "--filter", metavar = "alg", choices = ( "best", "regression", "steps", ),
+    "--filter", metavar = "alg", default = "none",
+    choices = ( "best", "none", "regression", "steps", ),
     help = "only include a subset of variants"
 )
 parser.add_option(
