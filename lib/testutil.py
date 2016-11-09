@@ -384,6 +384,10 @@ class ParallelTest:
             "--wu", metavar = "device",
             help = "USB device to connect to WattsUp? meter at"
         )
+        group.add_option(
+            "--error", action = "store_true",
+            help = "Output fitness and error for multiobjective search"
+        )
         parser.add_option_group( group )
 
     def getParallelFitness( self, root, metrics ):
