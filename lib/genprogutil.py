@@ -91,6 +91,8 @@ class GenProgEnv:
                     yield [ 0.0 ]
 
 def lower_genome( genes ):
+    if genes == [ "original" ]:
+        return list()
     fields = re.compile( r'[a-z]\((\d+),(\d+)\)' )
     pending = list( reversed( genes ) )
     genes = list()
