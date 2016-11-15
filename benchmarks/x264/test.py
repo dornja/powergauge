@@ -72,10 +72,10 @@ class X264Test( ParallelTest ):
                 with Multitmp( len( outfile ) ) as result:
                     with open( "/dev/null", 'w' ) as null:
                         golden = self.getGolden()
-                        diffimg = os.path.join( root, "bin", "diff-img")
+                        diffimg = os.path.join( root, "benchmarks",
+                                                "x264", "diff-img.sh")
                         Multitmp.check_call(
-                            [ diffimg, "-r",
-                              "--thresh", "500000",
+                            [ diffimg,
                               golden,
                               outdir
                             ],
@@ -87,7 +87,7 @@ class X264Test( ParallelTest ):
                         with open( fname ) as fh:
                             error = 0
                             for line in fh:
-                                if line.startswith( "avg" ):
+                                if line.startswith( "total" ):
                                     error += float( line.split()[ 2 ] )
                             errors.append( 1 / ( error + 1 ) )
                     self.error = errors
