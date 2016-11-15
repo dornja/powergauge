@@ -44,11 +44,3 @@ cd "$CURDIR" > /dev/null
 
 echo "Copying assembly files"
 rsync -ar --include "*/" --include "*.s" --exclude "*" --prune-empty-dirs "$LIBAV/" src
-
-echo "Copying test scripts"
-cp test-scripts/* "$LIBAV/tests/"
-chmod +x "$LIBAV/tests/genprog-fate-run.sh"
-chmod +x "$LIBAV/tests/genprog-md5.sh"
-
-echo "Copying test files"
-cp -R genprog-tests "$LIBAV"
