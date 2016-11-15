@@ -120,8 +120,18 @@ class ParetoSpace1D:
     def add( self, key, value ):
         if key in self.bykey:
             self.bykey[ key ][ -1 ] = None
+
+        # Use negative priority since we are using min-heaps. Also, use the
+        # upper edge of the interval instead of the interval itself. The heap
+        # algorithm assumes that (a < b) implies (not b < a), which is not true
+        # for intervals.
+
+        if isinstance( value[ 0 ], Interval ):
+            priority = - ( value[ 0 ].mean + value[ 0 ].delta )
+        else:
+            priority = - value[ 0 ]
         self.count += 1
-        heap_entry = [ - value[ 0 ], self.count, key, value ]
+        heap_entry = [ priority, self.count, key, value ]
         self.bykey[ key ] = heap_entry
         heapq.heappush( self.best, heap_entry )
 
@@ -348,8 +358,24 @@ def getBest():
 def bestFilter( entries ):
     for entry in entries:
         pass
-    results = [ unique[ key ] for key, _ in best.getFrontier() ]
-    for entry in sorted( results, key = lambda e: ( e.gen, e.evalno ) ):
+    nbest = list()
+    while True:
+        results = [ unique[ key ] for key, _ in best.getFrontier() ]
+        done = False
+        for e1 in nbest:
+            for e2 in results:
+                if best.dominates( e1.fitness, e2.fitness ):
+                    done = True
+                    break
+            if done:
+                break
+        if done:
+            break
+        for e in results:
+            nbest.append( e )
+            best.remove( e.variant )
+
+    for entry in sorted( nbest, key = lambda e: ( e.gen, e.evalno ) ):
         yield entry
 
 def regressionFilter( entries ):
