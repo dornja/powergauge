@@ -193,8 +193,12 @@ def get_genomes( csvfile ):
         reader = csv.DictReader( fh )
         for i, row in enumerate( reader, 1 ):
             # order by decreasing fitness, increasing genome length, eval order
+            fitness = list()
+            for key in sorted( row ):
+                if key.startswith( "fitness" ):
+                    fitness.append( - float( row[ key ] ) )
             genomes.append( (
-                - float( row[ "fitness" ] ),
+                fitness,
                 len( row[ "variant" ].split() ),
                 i,
                 row[ "variant" ]
