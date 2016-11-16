@@ -346,7 +346,7 @@ def process_genome( best ):
                     if not options.force:
                         cmd += [ "--cache", cache( test_input ) ]
                     if options.low_error is not None:
-                        min_cmd += [ "--low-error", str( options.low_error ) ]
+                        cmd += [ "--low-error", str( options.low_error ) ]
                     with mktemp() as log:
                         try:
                             pipeline( [ cmd, [ "tee", log ] ] )

@@ -3,10 +3,11 @@ from __future__ import division
 import csv
 from distutils.spawn import find_executable
 from itertools import repeat
-from math import gamma, pi, sqrt
+import numpy as np
 from optparse import OptionGroup, OptionParser
 import os
 import platform
+from scipy.special import gamma
 from subprocess import call, check_call, Popen, CalledProcessError
 import sys
 from util import infomsg, mktemp
@@ -27,36 +28,44 @@ def reduce_error( f, alpha, probes = 5 ):
     log = debug_file
     debug_file = None
 
-    n = 0
-    mean = 0.0
-    M2   = 0.0
-    errp = 1.0
+    n = None
+    mean = None
+    M2   = None
+    errp = np.ones( 1 )
 
-    while alpha < errp:
+    while np.any( alpha < errp ):
         infomsg( "errp =", errp, ": Attempting", probes, "more probes" )
         i = 0
         while i < probes:
             for x in f():
                 if log is not None:
-                    infomsg( x, file = log )
+                    infomsg( *x, file = log )
                 yield x
-                n = n + 1
+                x = np.array( x )
+                if len( errp ) < len( x ):
+                    if n is None:
+                        n    = np.zeros( len( x ) )
+                        mean = np.zeros( len( x ) )
+                        M2   = np.zeros( len( x ) )
+                        errp = np.zeros( len( x ) )
+                    else:
+                        infomsg( "warning: change in fitness dimnsions!" )
+                        return
+                n += 1
                 delta = x - mean
-                mean = mean + delta / n
-                M2 = M2 + delta * ( x - mean )
+                mean += delta / n
+                M2 += delta * ( x - mean )
                 i = i + 1
         var = M2 / ( n - 1 )
-        if var == 0:
-            break
-        errp = sqrt( var / n ) / mean
-        if n < 100:
-            c4 = sqrt( 2 / ( n - 1 ) ) * gamma( n / 2 ) / gamma( ( n - 1 ) / 2 )
+        errp = np.sqrt( var / n ) / mean
+        if np.any( n < 100 ):
+            c4 = np.sqrt( 2 / ( n-1 ) ) * gamma( n / 2 ) / gamma( ( n-1 ) / 2 )
             errp = errp / c4
-
         probes += probes
 
     if log is not None:
-        infomsg( n, "probes: relative standard error =", errp, file = log )
+        for j in range( len( n ) ):
+            infomsg( n[j], "probes: relative standard error =", errp[j], file = log )
         debug_file = log
 
 class Multitmp:
