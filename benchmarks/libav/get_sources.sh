@@ -43,4 +43,5 @@ echo ""
 cd "$CURDIR" > /dev/null
 
 echo "Copying assembly files"
-rsync -ar --include "*/" --include "*.s" --exclude "*" --prune-empty-dirs "$LIBAV/" src
+rsync -a --include "*/" --include "*.s" --exclude "*" --prune-empty-dirs "$LIBAV/" "$SRC"
+rsync -a --delete "$LIBAV/" "$SRC" --exclude "*.c"

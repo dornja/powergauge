@@ -13,14 +13,8 @@ exe=$2
 
 tmpdir=build
 
-rsync -a --delete "$root/libav-src/" "$tmpdir" --exclude "*.c"
-rsync -a  "$root/src/" "$tmpdir"
+rsync -a --checksum --no-times "$src/" "$tmpdir"
 chmod -R u+w $tmpdir
 
-make -C "$tmpdir" -f "$root/Makefile" avconv
-
-# rsync -a --checksum --no-times --include "*/" --include "*.s" --exclude "*" "$src/" "$tmpdir"
-# chmod -R u+w $tmpdir
-
-# make -C $tmpdir -f Makefile avconv # > /dev/null 2>&1 || exit $?
-# cp $tmpdir/avconv $exe
+make -C "$tmpdir" -f "$root/Makefile" avconv > /dev/null 2>&1 || exit $?
+cp $tmpdir/avconv $exe
