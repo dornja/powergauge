@@ -45,3 +45,9 @@ cd "$CURDIR" > /dev/null
 echo "Copying assembly files"
 rsync -a --include "*/" --include "*.s" --exclude "*" --prune-empty-dirs "$LIBAV/" "$SRC"
 rsync -a --delete "$LIBAV/" "$SRC" --exclude "*.c"
+
+cd inputs
+for input in * ; do
+    echo "unpacking input" `basename "$input"`
+    tar xf "$input"
+done
