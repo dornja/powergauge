@@ -110,7 +110,7 @@ class DDGenome( DD ):
                 try:
                     result = self.PASS
                     for fitness in self.genprog.run_test( exe ):
-                        if fitness[ 0 ] == 0.0:
+                        if any( [ f == 0 for f in fitness ] ):
                             result = self.FAIL
                 except CalledProcessError:
                     fitness = "test failure"
