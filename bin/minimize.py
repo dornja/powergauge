@@ -20,7 +20,7 @@ from testutil import reduce_error
 from util import infomsg, mktemp
 
 # Casting minimization of energy as a delta-debugging problem. The original
-# assembly code is taken as "yesterday's code" and hte output from the GA is
+# assembly code is taken as "yesterday's code" and the output from the GA is
 # taken as "today's code." A subset of deltas "passes" if the modeled energy
 # usage is substantially different from the energy used by the GA output, and
 # fails if it is substantially the same. Thus, the minimal failing deltas
@@ -135,9 +135,10 @@ class DDGenome( DD ):
             self.cache_outcomes = 0
 
         infomsg( "INFO: computing optimized energy usage" )
-        self.optimized = self.get_fitness( deltas )
-        self.mean = np.mean( self.optimized )
-        assert self.mean > 0, "'optimized' variant has 0 fitness!"
+        self.optimized = np.array( self.get_fitness( deltas ) )
+
+        self.mean = np.mean( self.optimized, axis = 0 )
+        assert np.all( self.mean > 0 ), "'optimized' variant has 0 fitness!"
 
     def get_fitness( self, deltas ):
         global cache
@@ -151,15 +152,14 @@ class DDGenome( DD ):
                 return list()
             def tester():
                 for line in self.genprog.run_test( exe ):
-                    fitness = line[ 0 ]
-                    infomsg( "   ", fitness )
-                    yield fitness
+                    infomsg( "   ", *line, sep = "\t" )
+                    yield line
             fitness = list()
-            for value in reduce_error( tester, options.low_error, 20 ):
-                if value == 0:
-                    fitness = [ 0 ]
+            for values in reduce_error( tester, options.low_error, 20 ):
+                if np.any( values == 0 ):
+                    fitness = [ np.zeros( len( values ) ) ]
                     break
-                fitness.append( value )
+                fitness.append( values )
             if not options.disable_cache:
                 cache[ key ] = fitness
             return fitness
@@ -168,17 +168,26 @@ class DDGenome( DD ):
         # "Passing" behavior is more like the original (slower, more energy).
         # "Failing" behavior is more optimized (faster, less energy).
 
-        fitness = self.get_fitness( deltas )
+        fitness = np.array( self.get_fitness( deltas ) )
         if len( fitness ) == 0:
             return self.UNRESOLVED
-        if any( map( lambda f: f == 0, fitness ) ):
+        if np.any( fitness == 0 ):
             return self.UNRESOLVED
-        infomsg( "   ", np.mean( fitness ), "+/-", 1.96 * np.std( fitness ) / np.sqrt( len( fitness ) ) )
-        pval = mannwhitneyu( self.optimized, fitness )[ 1 ]
-        if pval < options.alpha and np.mean( fitness ) < self.mean:
-            return self.PASS
-        else:
-            return self.FAIL
+        m = np.mean( fitness, axis = 0 )
+        s = np.std( fitness, axis = 0 )
+        sqrtn = np.sqrt( fitness.shape[ 0 ] )
+        for i in range( fitness.shape[ 1 ] ):
+            infomsg( "   ", m[ i ], "+/-", 1.96 * s[ i ] / sqrtn )
+        for i in range( fitness.shape[ 1 ] ):
+            if np.all( self.optimized[ ::, i ] == fitness[ ::, i ] ):
+                # Optimized and fitness are all the same value, likely because
+                # we are comparing the optimized variant to itself. This counts
+                # as a fail, since they are clearly drawn from the same distro.
+                continue
+            pval = mannwhitneyu( self.optimized[ ::, i ], fitness[ ::, i ] )[ 1 ]
+            if pval < options.alpha and m[ i ] < self.mean[ i ]:
+                return self.PASS
+        return self.FAIL
 
 ########
 # 
@@ -233,26 +242,34 @@ else:
 with get_cache() as cache:
     deltas, builder = get_builder( deltas )
     infomsg( "found", len( deltas ), "deltas" )
-    dd = DDGenome( genprog, builder, deltas )
-    if options.search == "brute":
-        deltas = brute_force( dd, deltas )
-    elif options.search == "delta":
-        try:
-            deltas = dd.ddmin( deltas )
-        except AssertionError:
-            if dd.test([]) == dd.PASS:
-                raise
-            else:
-                deltas = list()
-    elif options.search == "none":
-        pass
+    if len( deltas ) == 0:
+        base = [ 1 ]
+        optim = [ 1 ]
     else:
-        infomsg( "ERROR: unexpected search algorithm:", options.search )
-        exit( 2 )
-    infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
-    base = dd.get_fitness( [] )
-    optim = dd.get_fitness( deltas )
-    infomsg( "improvement:", 1 - np.mean( base ) / np.mean( optim ) )
+        dd = DDGenome( genprog, builder, deltas )
+        if options.search == "brute":
+            deltas = brute_force( dd, deltas )
+        elif options.search == "delta":
+            try:
+                deltas = dd.ddmin( deltas )
+            except AssertionError:
+                if dd.test([]) == dd.PASS:
+                    raise
+                else:
+                    deltas = list()
+        elif options.search == "none":
+            pass
+        else:
+            infomsg( "ERROR: unexpected search algorithm:", options.search )
+            exit( 2 )
+        infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
+        base = np.mean( dd.get_fitness( [] ), axis = 0 )
+        optim = np.mean( dd.get_fitness( deltas ), axis = 0 )
+    for i in range( len( optim ) ):
+        if optim[ i ] != 0:
+            infomsg( "improvement:", 1 - base[ i ] / optim[ i ] )
+        else:
+            infomsg( "fitness:    ", base[ i ] )
 
 if options.save_binary is not None or options.save_sources is not None:
     with builder.build( deltas ) as exe:

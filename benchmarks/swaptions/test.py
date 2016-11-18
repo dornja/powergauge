@@ -1,13 +1,15 @@
 #!/usr/bin/python
 
 import os
+import shutil
 import sys
 
 root = os.path.abspath( sys.argv[ 0 ] )
 for i in range( 3 ):
     root = os.path.dirname( root )
 sys.path.append( os.path.join( root, "lib" ) )
-from testutil import ParallelTest
+from testutil import ParallelTest, Multitmp
+from util import mktemp
 
 # Run test.py -h to get usage information
 
@@ -23,6 +25,48 @@ class SwaptionsTest( ParallelTest ):
             "huge":   [ "-ns", "128", "-sm", "1000000", "-nt", "1" ],
         }[ self.size ]
         return cmd, { "stderr": outfile }
+
+    def validateCorrectness( self, outfile ):
+        if self.options.error:
+            with Multitmp( len( outfile ) ) as result:
+                with open( "/dev/null", 'w' ) as null:
+                    golden = self.getGolden()
+                    diff = os.path.join( root, "benchmarks", "swaptions", "diff.py")
+                    Multitmp.check_call(
+                        [ diff,
+                          golden,
+                          outfile
+                        ],
+                        stdout = result, stderr = null,
+                        verbose = self.options.verbose,
+                    )
+                errors = list()
+                for fname in result:
+                    with open( fname ) as fh:
+                        error = 0
+                        for line in fh:
+                            error += float(line)
+                        errors.append( 1 / ( error + 1 ) )
+                self.error = errors
+                return True
+        else:
+            return ParallelTest.validateCorrectness( self, outfile )
+
+    def getParallelFitness( self, *args ):
+        results = ParallelTest.getParallelFitness( self, *args )
+        if self.options.error:
+            if results == [ [ 0 ] ]:
+                return [ [ 0 ], [ 0 ] ]
+            results.append( self.error )
+            return results
+        else:
+            return results
+
+    def diff( self, golden, actual ):
+        if self.options.error:
+            return True
+        else:
+            return ParallelTest.diff( self, golden, actual )
 
 SwaptionsTest().run( root )
 

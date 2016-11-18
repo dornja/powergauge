@@ -1,14 +1,20 @@
 #!/bin/bash
 
-LIBAV="libav-src"
-SRC=`dirname "$1"`
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-if [ ! -d "$DIR/$LIBAV" ] ; then
-    echo "$LIBAV folder not found. Did you run get_sources.sh?"
+if [ $# -lt 2 ] ; then
+    echo "Usage: $0 __SOURCE_NAME__ __EXE_NAME__"
     exit 1
 fi
 
-rsync -rlpgoD "$SRC/" "$DIR/$LIBAV"
-cd "$LIBAV"
-make -f "$DIR/Makefile" avconv &> /dev/null
+root=`dirname "$0"`
+root=`cd "$root" ; pwd`
+
+src=`dirname "$1"`
+exe=$2
+
+tmpdir=build
+
+rsync -a --checksum --no-times "$src/" "$tmpdir"
+chmod -R u+w $tmpdir
+
+make -C "$tmpdir" -f "$root/Makefile" avconv > /dev/null 2>&1 || exit $?
+cp $tmpdir/avconv $exe
