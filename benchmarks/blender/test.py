@@ -4,6 +4,7 @@ from optparse import OptionParser
 import os
 from subprocess import check_call
 import sys
+import time
 
 root = os.path.abspath( sys.argv[ 0 ] )
 for i in range( 3 ):
@@ -36,6 +37,8 @@ class BlenderTest( ParallelTest ):
                 self.exe = true_exe
                 return ParallelTest.getParallelFitness( self, *args )
             finally:
+                if self.size == "huge":
+                    time.sleep( 0.5 )
                 check_call( [ "cp", "-p", tmp, true_exe ] )
                 self.exe = temp_exe
 
