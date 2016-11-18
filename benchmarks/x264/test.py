@@ -72,8 +72,7 @@ class X264Test( ParallelTest ):
                 with Multitmp( len( outfile ) ) as result:
                     with open( "/dev/null", 'w' ) as null:
                         golden = self.getGolden()
-                        diffimg = os.path.join( root, "benchmarks",
-                                                "x264", "diff-img.sh")
+                        diffimg = os.path.join( root, "bin", "diff-img.sh")
                         Multitmp.check_call(
                             [ diffimg,
                               golden,

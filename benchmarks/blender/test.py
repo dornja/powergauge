@@ -26,7 +26,7 @@ class BlenderTest( ParallelTest ):
             help = "max threshold of average per-pixel error to allow"
         )
         return parser
-
+    
     def getParallelFitness( self, *args ):
         true_exe = "build/bin/blender"
         temp_exe = self.exe
@@ -35,7 +35,14 @@ class BlenderTest( ParallelTest ):
             try:
                 check_call( [ "cp", "-p", self.exe, true_exe ] )
                 self.exe = true_exe
-                return ParallelTest.getParallelFitness( self, *args )
+                results = ParallelTest.getParallelFitness( self, *args )
+                if self.options.error:
+                    if results == [ [ 0 ] ]:
+                        return [ [ 0 ], [ 0 ] ]
+                    results.append( self.error )
+                    return results
+                else:
+                    return results
             finally:
                 if self.size == "huge":
                     time.sleep( 0.5 )
@@ -54,30 +61,60 @@ class BlenderTest( ParallelTest ):
         cmd += [ "--" ] + render + [ outfile ]
         return cmd, dict()
 
+    def validateCorrectness( self, outfile ):
+        if self.options.error:
+            with Multitmp( len( outfile ) ) as result:
+                with open( "/dev/null", 'w' ) as null:
+                    golden = self.getGolden()
+                    diffimg = os.path.join( root, "bin", "diff-img")
+                    Multitmp.check_call(
+                        [ diffimg,
+                          golden,
+                          outfile
+                        ],
+                        stdout = result, stderr = null,
+                        verbose = self.options.verbose,
+                    )
+                errors = list()
+                for fname in result:
+                    with open( fname ) as fh:
+                        error = 0
+                        for line in fh:
+                            if line.startswith( "total" ):
+                                error += float( line.split()[ 2 ] )
+                        errors.append( 1 / ( error + 1 ) )
+                self.error = errors
+                return True
+        else:
+            return ParallelTest.validateCorrectness( self, outfile )
+    
     def diff( self, golden, actual ):
-        diffimg = os.path.join( root, "bin", "diff-img" )
-        with Multitmp( len( actual ) ) as result:
-            with open( "/dev/null", 'w' ) as null:
-                Multitmp.check_call(
-                    [ diffimg,
-                        "--thresh", str( self.options.threshold ),
-                        "--l2",
-                        golden, actual
-                    ],
-                    stdout = result, stderr = null,
-                    verbose = self.options.verbose
-                )
-            for fname in result:
-                with open( fname ) as fh:
-                    for line in fh:
-                        if line.startswith( "avg" ):
-                            fitness = float( line.split()[ 2 ] )
-                            break
-                    else:
-                        return False
-                if fitness > self.options.threshold:
-                    return False
+        if self.options.error:
             return True
+        else:
+            diffimg = os.path.join( root, "bin", "diff-img" )
+            with Multitmp( len( actual ) ) as result:
+                with open( "/dev/null", 'w' ) as null:
+                    Multitmp.check_call(
+                        [ diffimg,
+                            "--thresh", str( self.options.threshold ),
+                            "--l2",
+                            golden, actual
+                        ],
+                        stdout = result, stderr = null,
+                        verbose = self.options.verbose
+                    )
+                for fname in result:
+                    with open( fname ) as fh:
+                        for line in fh:
+                            if line.startswith( "avg" ):
+                                fitness = float( line.split()[ 2 ] )
+                                break
+                        else:
+                            return False
+                    if fitness > self.options.threshold:
+                        return False
+                return True
 
 BlenderTest().run( root )
 

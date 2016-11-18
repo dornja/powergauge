@@ -37,7 +37,31 @@ class VipsTest( ParallelTest ):
                 stdout = tmp
             )
             Multitmp.check_call( [ "mv", tmp, outfile ] )
-        return ParallelTest.validateCorrectness( self, outfile )
+            if self.options.error:
+                with Multitmp( len( outfile ) ) as result:
+                    with open( "/dev/null", 'w' ) as null:
+                        golden = self.getGolden()
+                        diffimg = os.path.join( root, "bin", "diff-img")
+                        Multitmp.check_call(
+                            [ diffimg,
+                              golden,
+                              outfile
+                            ],
+                            stdout = result, stderr = null,
+                            verbose = self.options.verbose,
+                        )
+                    errors = list()
+                    for fname in result:
+                        with open( fname ) as fh:
+                            error = 0
+                            for line in fh:
+                                if line.startswith( "total" ):
+                                    error += float( line.split()[ 2 ] )
+                            errors.append( 1 / ( error + 1 ) )
+                    self.error = errors
+                    return True
+            else:
+                return ParallelTest.validateCorrectness( self, outfile )
 
     def getParallelFitness( self, *args ):
         with mktemp( prefix = "vips" ) as tmpexe:
@@ -46,9 +70,22 @@ class VipsTest( ParallelTest ):
             shutil.copymode( self.exe, tmpexe )
             try:
                 self.exe = tmpexe
-                return ParallelTest.getParallelFitness( self, *args )
+                results = ParallelTest.getParallelFitness( self, *args )
+                if self.options.error:
+                    if results == [ [ 0 ] ]:
+                        return [ [ 0 ], [ 0 ] ]
+                    results.append( self.error )
+                    return results
+                else:
+                    return results
             finally:
                 self.exe = oldexe
+
+    def diff( self, golden, actual ):
+        if self.options.error:
+            return True
+        else:
+            return ParallelTest.diff( self, golden, actual )
 
 VipsTest().run( root )
 
