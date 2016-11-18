@@ -29,7 +29,6 @@ class LibavTest( ParallelTest ):
         cmd = [ self.exe ]
         cmd += {
             "mpeg4":    [ "-i", "inputs/eledream_640x360_8.y4m",
-                          "-codec", "mpeg4",
                           "-vtag", "xvid",
                           "-qscale", "2",       # 1-31
                           "-an",
@@ -71,8 +70,7 @@ class LibavTest( ParallelTest ):
                 with Multitmp( len( outfile ) ) as result:
                     with open( "/dev/null", 'w' ) as null:
                         golden = self.getGolden()
-                        diffimg = os.path.join( root, "benchmarks",
-                                                "x264", "diff-img.sh")
+                        diffimg = os.path.join( root, "bin", "diff-img.sh")
                         Multitmp.check_call(
                             [ diffimg,
                               golden,
