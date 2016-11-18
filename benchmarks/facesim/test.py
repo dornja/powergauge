@@ -19,7 +19,10 @@ class FacesimTest( ParallelTest ):
             self.size = "large"
 
     def getCommand( self, outfile ):
-        inputdir = "inputs/%s/Face_Data" % self.size
+        if self.size == "huge":
+            inputdir = "inputs/native/Face_Data"
+        else:
+            inputdir = "inputs/%s/Face_Data" % self.size
         Multitmp.check_call( [ "rm", "-f", outfile ] )
         Multitmp.check_call( [ "mkdir", outfile ] )
         Multitmp.check_call( [ "rsync", "-a", inputdir, outfile ] )
