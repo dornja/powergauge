@@ -179,7 +179,9 @@ class DDGenome( DD ):
         for i in range( fitness.shape[ 1 ] ):
             infomsg( "   ", m[ i ], "+/-", 1.96 * s[ i ] / sqrtn )
         for i in range( fitness.shape[ 1 ] ):
-            if np.all( self.optimized[ ::, i ] == fitness[ ::, i ] ):
+            if np.ptp( self.optimized[ ::, i ] ) == 0 and \
+                    np.ptp( fitness[ ::, i ] ) == 0 and \
+                    self.optimized[ 0, i ] == fitness[ 0, i ]:
                 # Optimized and fitness are all the same value, likely because
                 # we are comparing the optimized variant to itself. This counts
                 # as a fail, since they are clearly drawn from the same distro.

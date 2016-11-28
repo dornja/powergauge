@@ -3,7 +3,7 @@
 from collections import namedtuple
 import csv
 import heapq
-from math import floor
+from math import floor, isinf
 from optparse import OptionParser
 import random
 import re
@@ -340,7 +340,7 @@ def statsFilter( entries ):
         numEntries += 1
         if entry.variant == "original":
             original = entry
-        if all( [ x.mean == 0 for x in entry.fitness ] ):
+        if all( [ x.mean == 0 or isinf( x.mean ) for x in entry.fitness ] ):
             zeros += 1
 
         if unique.get( entry.variant, entry ).fitness != entry.fitness:

@@ -206,10 +206,11 @@ def get_genomes( csvfile ):
     return [ ( i, g ) for _, _, i, g in sorted( genomes ) ]
 
 def get_improvement( logfile ):
+    result = list()
     with open( logfile ) as fh:
         for line in fh:
             if line.startswith( "improvement:" ):
-                result = line.split()[ -1 ]
+                result.append( line.split()[ -1 ] )
     return result
 
 ########
@@ -354,7 +355,9 @@ def process_genome( best ):
                             if ( genome_key, test_input ) in imprv:
                                 del imprv[ genome_key, test_input ]
                             continue
-                        imprv[ genome_key, test_input ] = get_improvement( log )
+                        imprv[ genome_key, test_input ] = " ".join(
+                            map( str, get_improvement( log ) )
+                        )
 
 if options.all_variants:
     for i, genome in enumerate( genomes ):
