@@ -31,6 +31,7 @@ class VipsTest( ParallelTest ):
         return cmd, dict()
 
     def validateCorrectness( self, outfile ):
+        correctness = ParallelTest.validateCorrectness( self, outfile )
         with Multitmp( len( outfile ) ) as tmp:
             Multitmp.check_call(
                 [ "sed", "-e", "/^#im_vips2ppm/d", outfile ],
@@ -61,7 +62,7 @@ class VipsTest( ParallelTest ):
                     self.error = errors
                     return True
             else:
-                return ParallelTest.validateCorrectness( self, outfile )
+                return correctness
 
     def getParallelFitness( self, *args ):
         with mktemp( prefix = "vips" ) as tmpexe:

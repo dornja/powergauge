@@ -62,6 +62,7 @@ class BlenderTest( ParallelTest ):
         return cmd, dict()
 
     def validateCorrectness( self, outfile ):
+        correctness = ParallelTest.validateCorrectness( self, outfile )
         if self.options.error:
             with Multitmp( len( outfile ) ) as result:
                 with open( "/dev/null", 'w' ) as null:
@@ -86,7 +87,7 @@ class BlenderTest( ParallelTest ):
                 self.error = errors
                 return True
         else:
-            return ParallelTest.validateCorrectness( self, outfile )
+            return correctness
     
     def diff( self, golden, actual ):
         if self.options.error:

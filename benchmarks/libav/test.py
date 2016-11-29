@@ -51,6 +51,7 @@ class LibavTest( ParallelTest ):
             return "outputs/%s%s" % ( self.test, self.getOutputSuffix() )
 
     def validateCorrectness( self, outfile ):
+        correctness = ParallelTest.validateCorrectness( self, outfile )
         if self.options.error:
             with Multitmp( len( outfile ) ) as outdir:
                 Multitmp.check_call( [ "rm", "-rf", outdir ], verbose = self.options.verbose )
@@ -90,7 +91,7 @@ class LibavTest( ParallelTest ):
                     self.error = errors
                     return True
         else:
-            return ParallelTest.validateCorrectness( self, outfile )
+            return correctness
 
 
     def diff( self, golden, actual):

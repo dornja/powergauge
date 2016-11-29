@@ -53,6 +53,7 @@ class X264Test( ParallelTest ):
             return "outputs/%s%s" % ( self.size, self.getOutputSuffix() )
 
     def validateCorrectness( self, outfile ):
+        correctness = ParallelTest.validateCorrectness( self, outfile )
         if self.options.error:
             with Multitmp( len( outfile ) ) as outdir:
                 Multitmp.check_call( [ "rm", "-rf", outdir ], verbose = self.options.verbose )
@@ -92,7 +93,7 @@ class X264Test( ParallelTest ):
                     self.error = errors
                     return True
         else:
-            return ParallelTest.validateCorrectness( self, outfile )
+            return correctness
 
     def diff( self, golden, actual):
         if self.options.error:
