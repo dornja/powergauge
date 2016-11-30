@@ -1,17 +1,20 @@
 #!/usr/bin/python
 
+from math import isnan, isinf
 import os
-import shutil
+import re
+from scipy.stats import kendalltau
 import sys
 
 root = os.path.abspath( sys.argv[ 0 ] )
 for i in range( 3 ):
     root = os.path.dirname( root )
 sys.path.append( os.path.join( root, "lib" ) )
-from testutil import ParallelTest, Multitmp
-from util import mktemp
+from testutil import ParallelTest
 
 # Run test.py -h to get usage information
+
+pat = re.compile( r"Swaption (\d+): \[SwaptionPrice: ([^ ]+) StdError: [^ ]+" )
 
 class SwaptionsTest( ParallelTest ):
     def getCommand( self, outfile ):
@@ -26,47 +29,70 @@ class SwaptionsTest( ParallelTest ):
         }[ self.size ]
         return cmd, { "stderr": outfile }
 
-    def validateCorrectness( self, outfile ):
-        if self.options.error:
-            with Multitmp( len( outfile ) ) as result:
-                with open( "/dev/null", 'w' ) as null:
-                    golden = self.getGolden()
-                    diff = os.path.join( root, "benchmarks", "swaptions", "diff.py")
-                    Multitmp.check_call(
-                        [ diff,
-                          golden,
-                          outfile
-                        ],
-                        stdout = result, stderr = null,
-                        verbose = self.options.verbose,
-                    )
-                errors = list()
-                for fname in result:
-                    with open( fname ) as fh:
-                        error = 0
-                        for line in fh:
-                            error += float(line)
-                        errors.append( 1 / ( error + 1 ) )
-                self.error = errors
-                return True
-        else:
-            return ParallelTest.validateCorrectness( self, outfile )
-
     def getParallelFitness( self, *args ):
         results = ParallelTest.getParallelFitness( self, *args )
         if self.options.error:
             if results == [ [ 0 ] ]:
                 return [ [ 0 ], [ 0 ] ]
             results.append( self.error )
-            return results
-        else:
-            return results
+        return results
+
+    def _getPrices( self, fname ):
+        prices = list()
+        with open( fname ) as fh:
+            for i, line in enumerate( fh ):
+                m = pat.match( line )
+                if not m:
+                    prices.append( ( None, i, None ) )
+                else:
+                    try:
+                        prices.append(
+                            ( m.group( 1 ), i, float( m.group( 2 ) ) )
+                        )
+                    except ValueError:
+                        prices.append( ( None, i, None ) )
+        prices.sort()
+        return prices
 
     def diff( self, golden, actual ):
-        if self.options.error:
-            return True
-        else:
+        if not self.options.error:
             return ParallelTest.diff( self, golden, actual )
+        g_prices = self._getPrices( golden )
+
+        self.error = list()
+        for fname in actual:
+            a_prices = self._getPrices( fname )
+            i, j = 0, 0
+            a, b = list(), list()
+            error = 0
+            while i < len( g_prices ) and j < len( a_prices ):
+                if g_prices[ i ][ 0 ] == a_prices[ j ][ 0 ]:
+                    a.append( g_prices[ i ][ 1 ] )
+                    b.append( a_prices[ j ][ 1 ] )
+                    if g_prices[ i ][ 2 ] < a_prices[ j ][ 2 ]:
+                        e = 1 - g_prices[ i ][ 2 ] / a_prices[ j ][ 2 ]
+                    else:
+                        e = 1 - a_prices[ j ][ 2 ] / g_prices[ i ][ 2 ]
+                    if isnan( e ) or isinf( e ):
+                        e = 1
+                    error += e
+                    i += 1
+                    j += 1
+                elif g_prices[ i ][ 0 ] < a_prices[ j ][ 0 ]:
+                    i += 1
+                    error += 1
+                else:
+                    j += 1
+                    error += 1
+            error += len( g_prices ) - i
+            error += len( a_prices ) - j
+            if len( a ) < 2:
+                error += 1
+            else:
+                error += 0.5 - 0.5 * kendalltau( a, b )[ 0 ]
+
+            self.error.append( 1 / ( error + 1.0 ) )
+        return True
 
 SwaptionsTest().run( root )
 
