@@ -69,7 +69,9 @@ class SwaptionsTest( ParallelTest ):
                 if g_prices[ i ][ 0 ] == a_prices[ j ][ 0 ]:
                     a.append( g_prices[ i ][ 1 ] )
                     b.append( a_prices[ j ][ 1 ] )
-                    if g_prices[ i ][ 2 ] < a_prices[ j ][ 2 ]:
+                    if g_prices[ i ][ 2 ] == 0:
+                        e = abs( a_prices[ j ][ 2 ] )
+                    elif g_prices[ i ][ 2 ] < a_prices[ j ][ 2 ]:
                         e = 1 - g_prices[ i ][ 2 ] / a_prices[ j ][ 2 ]
                     else:
                         e = 1 - a_prices[ j ][ 2 ] / g_prices[ i ][ 2 ]
