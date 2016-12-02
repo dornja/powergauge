@@ -28,7 +28,7 @@ def reduce_error( f, alpha, probes = 5 ):
     log = debug_file
     debug_file = None
 
-    n = None
+    n    = None
     mean = None
     M2   = None
     errp = np.ones( 1 )
@@ -42,15 +42,17 @@ def reduce_error( f, alpha, probes = 5 ):
                     infomsg( *x, file = log )
                 yield x
                 x = np.array( x )
+                if n is None:
+                    n    = np.zeros( len( x ) )
+                    mean = np.zeros( len( x ) )
+                    M2   = np.zeros( len( x ) )
+                    errp = np.zeros( len( x ) )
                 if len( errp ) < len( x ):
-                    if n is None:
-                        n    = np.zeros( len( x ) )
-                        mean = np.zeros( len( x ) )
-                        M2   = np.zeros( len( x ) )
-                        errp = np.zeros( len( x ) )
-                    else:
-                        infomsg( "warning: change in fitness dimnsions!" )
-                        return
+                    infomsg( "warning: change in fitness dimnsions!" )
+                    return
+                if np.all( x == 0 ):
+                    infomsg( "warning: 0 fitness: terminating evaluation" )
+                    return
                 n += 1
                 delta = x - mean
                 mean += delta / n
