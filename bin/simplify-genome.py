@@ -181,6 +181,7 @@ def parse_log( infile, outfile ):
         parselog, infile,
             "--filter", options.filter,
             "--final",
+            "--no-confidence",
             "--csv", outfile
     ]
     if options.stop_after is not None:
@@ -270,8 +271,9 @@ def process_genome( best ):
 # Maximize the genome for all inputs
 ########
 
-    if len( options.inputs ) > 0:
-        infomsg( "INFO: maximizing genome for inputs:", *options.inputs )
+    if test_cmd.getInput() not in options.inputs:
+        options.inputs = [ test_cmd.getInput() ] + options.inputs
+    infomsg( "INFO: maximizing genome for inputs:", *options.inputs )
     with saving( "multi.cache" ):
         for test_input in options.inputs:
             next_genome = this_genome + "." + test_input
@@ -330,12 +332,9 @@ def process_genome( best ):
                     options.stop_after, options.filter, i
                 )
             )
-        inputs = options.inputs
-        if test_cmd.getInput() not in inputs:
-            inputs = [ test_cmd.getInput() ] + inputs
         genome_key = os.path.basename( this_genome )
         with ImprovementTable( os.path.join( results, "improvement" ) ) as imprv:
-            for test_input in inputs:
+            for test_input in options.inputs:
                 if not options.force and ( genome_key, test_input ) in imprv:
                     continue
                 with mkconfig( test_cmd( test_input ) ) as config:
