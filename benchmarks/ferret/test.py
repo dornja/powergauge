@@ -1,8 +1,11 @@
 #!/usr/bin/python
+from __future__ import division
 
 import os
 import sys
 from scipy import stats
+from math import isnan, isinf
+from numpy import isclose
 
 root = os.path.abspath( sys.argv[ 0 ] )
 for i in range( 3 ):
@@ -31,56 +34,117 @@ class FerretTest( ParallelTest ):
         cmd += [ outfile ]
         return cmd, dict()
 
+    def readFile( self, infile ):
+        queries = list()
+        with open( infile ) as fh:
+            for i, line in enumerate( fh ):
+                cur_rank = list()
+                terms = line.split()
+                if len( terms ) == 0:
+                    queries.append( ( "", i, [] ) )
+                    continue
+                query = terms[0]
+                ranks = terms[1:]
+                for j, rank in enumerate( ranks ):
+                    terms = rank.split(":")
+                    if len( terms ) != 2:
+                        cur_rank.append( ( "", j, 0.0 ) )
+                        continue
+                    image, rank = terms
+                    try:
+                        rank = float( rank )
+                    except ValueError:
+                        cur_rank.append( ( "", j, 0.0 ) )
+                        continue
+                    if not isnan( rank ):
+                        cur_rank.append( ( image, j, rank ) )
+                cur_rank.sort()
+                queries.append( ( query, i, cur_rank ) )
+        queries.sort()
+        return queries
+
+    def comm( self, l1, l2 ):
+        i, j = 0, 0
+        a, b = list(), list()
+        a_extra, b_extra = list(), list()
+        while i < len( l1 ) and j < len( l2 ):
+            if l1[ i ][ 0 ] == l2[ j ][ 0 ]:
+                a.append( l1[ i ][ 1: ] )
+                b.append( l2[ j ][ 1: ] )
+                i += 1
+                j += 1
+            elif l1[ i ][ 0 ] < l2[ j ][ 0 ]:
+                a_extra.append( l1[ i ][ 1: ] )
+                i += 1
+            else:
+                b_extra.append( l2[ j ][ 1: ] )
+                j += 1
+        while i < len( l1 ):
+            a_extra.append( l1[ i ][ 1: ] )
+            i += 1
+        while j < len( l2 ):
+            b_extra.append( l2[ j ][ 1: ] )
+            j += 1
+        return ( a_extra, a, b, b_extra )
+
     def validateCorrectness( self, outfile ):
         correctness = ParallelTest.validateCorrectness( self, outfile )
+        if not correctness:
+            return False
         if self.options.error:
             golden = self.getGolden()
-            gold_queries = dict()
-            with open( golden ) as fh:
-                for line in fh:
-                    gold_rank = dict()
-                    query = line.split()[0]
-                    ranks = line.split()[1:]
-                    for rank in ranks:
-                        image, rank = rank.split(":")
-                        rank = float(rank)
-                        gold_rank[image] = rank
-                    gold_queries[query] = gold_rank
+            gold_queries = self.readFile( golden )
             errors = list()
+            # Error function for missing/extra things. Max good is 0, max bad is 1
+            def errorFun( missing, extra ):
+                return 1 - ( 1 / ( 2 + ( 2 * missing ) ) ) - ( 1 / ( 2 + ( 2 * extra ) ) )
             for fname in outfile:
-                test_queries = dict()
-                # If the file isn't created, assign zero fitness
+                # No output file is max error
                 if not os.path.isfile(fname):
                     return False
-                with open( fname ) as fh:
-                    for line in fh:
-                        test_rank = dict()
-                        query = line.split()[0]
-                        ranks = line.split()[1:]
-                        for rank in ranks:
-                            image, rank = rank.split(":")
-                            rank = float(rank)
-                            if image not in gold_queries[query]:
-                                gold_queries[query][image] = float("inf")
-                            test_rank[image] = rank
-                        test_queries[query] = test_rank
-                total_correlation = 0
-                for query in gold_queries:
-                    gold_rank = gold_queries[query]
-                    # If all the queries aren't performed, assign zero fitness
-                    try:
-                        test_rank = test_queries[query]
-                    except KeyError:
-                        return False
-                    gold_list = list()
-                    test_list = list()
-                    for image, rank in gold_rank.items():
-                        gold_list.append(rank)
-                        test_list.append(test_rank.get(image, float("inf")))
-                    tau, _ = stats.kendalltau(gold_list, test_list)
-                    total_correlation += tau
-                # Tau is a number between -1 and 1, this is a fix to not break our tools
-                error = 1 - total_correlation/len( gold_queries )
+                test_queries = dict()
+                test_queries = self.readFile( fname )
+                t1 = 0          # Kendall tau penalty for weights
+                t2 = 0          # Kendall tau penalty for rank output order
+                t3 = 0          # Kendall tau penalty for query output order
+                w = 0           # Weighting error penalty
+                r = 0           # Penalty for missing or extra ranks
+                extra_queries, test_queries_int, gold_queries_int, missing_queries = \
+                    self.comm( test_queries, gold_queries )
+                # Penalty for missing or extra queries
+                q = errorFun( len( missing_queries ), len( extra_queries ) )
+                t3, _ = stats.kendalltau( [ x for x, _ in test_queries_int ],
+                                          [ x for x, _ in gold_queries_int ] )
+                t3 = (.5) - (.5 * t3) # Change tau scale to [0-1] where 0 is good
+                if isclose( t3, 0 ):
+                    t3 = 0.0
+                for test_query, gold_query in zip( test_queries_int, gold_queries_int ):
+                    extra_ranks, test_ranks_int, gold_ranks_int, missing_ranks = \
+                        self.comm( test_query[1], gold_query[1] )
+                    r += errorFun( len( missing_ranks ), len( extra_ranks ) )
+                    tau1, _ = stats.kendalltau( [x for _, x in gold_ranks_int],
+                                               [x for _, x in test_ranks_int] )
+                    tau1 = (.5) - (.5 * tau1) # Change tau scale to [0-1] where 0 is good
+                    if isclose( tau1, 0 ):
+                        tau1 = 0.0
+                        absolute_error = sum( [ abs( a[1] - b[1] ) for a, b in
+                                                zip( gold_ranks_int, test_ranks_int ) ] )
+                        if isnan( absolute_error ) or isinf( absolute_error ):
+                            w += 1
+                        else:
+                            w += absolute_error / ( absolute_error + 1 )
+                    t1 += tau1
+                    tau2, _ = stats.kendalltau( [x for x, _ in gold_ranks_int],
+                                                [x for x, _ in test_ranks_int] )
+                    tau2 = (.5) - (.5 * tau2) # Change tau scale to [0-1] where 0 is good
+                    if isclose( tau2, 0 ):
+                        tau2 = 0.0
+                    t2 += tau2
+                t1 = t1 / len( gold_queries_int )
+                t2 = t2 / len( gold_queries_int )
+                w = w / len( gold_queries_int )
+                r = r / len( gold_queries_int )
+                error = 1000 * q + 100 * r + 10 * t1 + 10 * t2 + 5 * t3 + w
                 errors.append( 1 / ( error + 1 ) )
             self.error = errors
             return True
@@ -88,6 +152,7 @@ class FerretTest( ParallelTest ):
             return correctness
 
     def diff( self, golden, actual):
+        self.error = list()
         if self.options.error:
             return True
         else:
