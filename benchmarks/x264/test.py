@@ -53,53 +53,50 @@ class X264Test( ParallelTest ):
             return "outputs/%s%s" % ( self.size, self.getOutputSuffix() )
 
     def validateCorrectness( self, outfile ):
-        correctness = ParallelTest.validateCorrectness( self, outfile )
         if self.options.error:
-            with Multitmp( len( outfile ) ) as outdir:
-                Multitmp.check_call( [ "rm", "-rf", outdir ], verbose = self.options.verbose )
-                Multitmp.check_call( [ "mkdir", outdir ], verbose = self.options.verbose )
+            with Multitmp( len( outfile ) ) as scratch:
+                Multitmp.check_call(
+                    [ "mv", outfile, scratch ], verbose = self.options.verbose
+                )
+                Multitmp.check_call(
+                    [ "mkdir", outfile ], verbose = self.options.verbose
+                )
                 Multitmp.check_call(
                     [ "avconv",
-                      "-i", outfile,
+                      "-i", scratch,
                       "-r", "25",
                       "-loglevel", "panic",
                       "%03d.png"
                     ],
                     verbose = self.options.verbose,
-                    cwd = outdir
+                    cwd = outfile
                 )
-                if not ParallelTest.validateCorrectness( self, outdir ):
-                    return False
-                with Multitmp( len( outfile ) ) as result:
-                    with open( "/dev/null", 'w' ) as null:
-                        golden = self.getGolden()
-                        diffimg = os.path.join( root, "bin", "diff-img.sh")
-                        Multitmp.check_call(
-                            [ diffimg,
-                              golden,
-                              outdir
-                            ],
-                            stdout = result, stderr = null,
-                            verbose = self.options.verbose,
-                        )
-                    errors = list()
-                    for fname in result:
-                        with open( fname ) as fh:
-                            error = 0
-                            for line in fh:
-                                if line.startswith( "total" ):
-                                    error += float( line.split()[ 2 ] )
-                            errors.append( 1 / ( error + 1 ) )
-                    self.error = errors
-                    return True
+                return ParallelTest.validateCorrectness( self, outfile )
         else:
-            return correctness
+            return ParallelTest.validateCorrectness( self, outfile )
 
-    def diff( self, golden, actual):
-        if self.options.error:
-            return True
-        else:
+    def diff( self, golden, actual ):
+        if not self.options.error:
             return ParallelTest.diff( self, golden, actual )
+
+        with Multitmp( len( actual ) ) as result:
+            with open( "/dev/null", 'w' ) as null:
+                diffimg = os.path.join( root, "bin", "diff-img.sh")
+                Multitmp.check_call(
+                    [ diffimg, golden, actual ],
+                    stdout = result, stderr = null,
+                    verbose = self.options.verbose,
+                )
+            errors = list()
+            for fname in result:
+                with open( fname ) as fh:
+                    error = 0
+                    for line in fh:
+                        if line.startswith( "total" ):
+                            error += float( line.split()[ 2 ] )
+                    errors.append( 1 / ( error + 1 ) )
+            self.error = errors
+            return True
 
     def getParallelFitness( self, root, metrics ):
         results = ParallelTest.getParallelFitness( self, root, metrics )
@@ -107,9 +104,7 @@ class X264Test( ParallelTest ):
             if results == [ [ 0 ] ]:
                 return [ [ 0 ], [ 0 ] ]
             results.append( self.error )
-            return results
-        else:
-            return results
+        return results
 
 X264Test().run( root )
 
