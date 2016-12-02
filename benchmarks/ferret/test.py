@@ -113,18 +113,24 @@ class FerretTest( ParallelTest ):
                     self.comm( test_queries, gold_queries )
                 # Penalty for missing or extra queries
                 q = errorFun( len( missing_queries ), len( extra_queries ) )
-                t3, _ = stats.kendalltau( [ x for x, _ in test_queries_int ],
-                                          [ x for x, _ in gold_queries_int ] )
-                t3 = (.5) - (.5 * t3) # Change tau scale to [0-1] where 0 is good
+                if len( gold_queries_int ) < 2:
+                    t3 = 1
+                else:
+                    t3, _ = stats.kendalltau( [ x for x, _ in test_queries_int ],
+                                              [ x for x, _ in gold_queries_int ] )
+                    t3 = (.5) - (.5 * t3) # Change tau scale to [0-1] where 0 is good
                 if isclose( t3, 0 ):
                     t3 = 0.0
                 for test_query, gold_query in zip( test_queries_int, gold_queries_int ):
                     extra_ranks, test_ranks_int, gold_ranks_int, missing_ranks = \
                         self.comm( test_query[1], gold_query[1] )
                     r += errorFun( len( missing_ranks ), len( extra_ranks ) )
-                    tau1, _ = stats.kendalltau( [x for _, x in gold_ranks_int],
-                                               [x for _, x in test_ranks_int] )
-                    tau1 = (.5) - (.5 * tau1) # Change tau scale to [0-1] where 0 is good
+                    if len( gold_ranks_int ) < 2:
+                        tau1 = 1
+                    else:
+                        tau1, _ = stats.kendalltau( [x for _, x in gold_ranks_int],
+                                                    [x for _, x in test_ranks_int] )
+                        tau1 = (.5) - (.5 * tau1) # Change tau scale to [0-1] where 0 is good
                     if isclose( tau1, 0 ):
                         tau1 = 0.0
                         absolute_error = sum( [ abs( a[1] - b[1] ) for a, b in
@@ -134,9 +140,12 @@ class FerretTest( ParallelTest ):
                         else:
                             w += absolute_error / ( absolute_error + 1 )
                     t1 += tau1
-                    tau2, _ = stats.kendalltau( [x for x, _ in gold_ranks_int],
-                                                [x for x, _ in test_ranks_int] )
-                    tau2 = (.5) - (.5 * tau2) # Change tau scale to [0-1] where 0 is good
+                    if len( gold_ranks_int ) < 2:
+                        tau2 = 1
+                    else:
+                        tau2, _ = stats.kendalltau( [x for x, _ in gold_ranks_int],
+                                                    [x for x, _ in test_ranks_int] )
+                        tau2 = (.5) - (.5 * tau2) # Change tau scale to [0-1] where 0 is good
                     if isclose( tau2, 0 ):
                         tau2 = 0.0
                     t2 += tau2
