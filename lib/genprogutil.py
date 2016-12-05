@@ -96,7 +96,7 @@ Entry = namedtuple( "Entry", "gen evalno fitness variant" )
 class Interval:
     def __init__( self, mean, delta ):
         self.mean  = mean
-        self.delta = delta
+        self.delta = abs( delta )
 
     def __neg__( self ):
         return Interval( - self.mean, self.delta )
@@ -147,6 +147,9 @@ class Interval:
 
     def __hash__( self ):
         return hash( ( self.mean, self.delta ) )
+
+    def bbox( self ):
+        return ( self.mean - self.delta, self.mean + self.delta )
 
 class LogParser:
     def __init__( self, stream, max_variants = None ):

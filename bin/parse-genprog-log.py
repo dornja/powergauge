@@ -1,19 +1,17 @@
 #!/usr/bin/env python
 
-from collections import namedtuple
 import csv
-import heapq
 from math import floor
 import numpy as np
 from optparse import OptionParser
 import os
-import random
 import re
 import sys
 
 root = os.path.dirname( os.path.dirname( os.path.abspath( sys.argv[ 0 ] ) ) )
 sys.path.append( os.path.join( root, "lib" ) )
 from genprogutil import LogParser, Entry, Interval
+from pareto import ParetoSpace
 
 parser = OptionParser( usage = "%prog [options] logfile" )
 parser.add_option(
@@ -60,136 +58,13 @@ if options.filter == "best":
 if options.improvement:
     options.final = True
 
-class ParetoSpace1D:
-    def __init__( self, lt ):
-        self.best  = list()
-        self.bykey = dict()
-        self.count = 0
-        self.lt    = lt
-
-    def dominates( self, a, b ):
-        # fitness values are 1-tuples containing Intervals
-        return self.lt( b[ 0 ], a[ 0 ] )
-
-    def add( self, key, value ):
-        if key in self.bykey:
-            self.bykey[ key ][ -1 ] = None
-
-        # Use negative priority since we are using min-heaps. Also, use the
-        # upper edge of the interval instead of the interval itself. The heap
-        # algorithm assumes that (a < b) implies (not b < a), which is not true
-        # for intervals.
-
-        if isinstance( value[ 0 ], Interval ):
-            priority = - ( value[ 0 ].mean + value[ 0 ].delta )
-        else:
-            priority = - value[ 0 ]
-        self.count += 1
-        heap_entry = [ priority, self.count, key, value ]
-        self.bykey[ key ] = heap_entry
-        heapq.heappush( self.best, heap_entry )
-
-    def remove( self, key ):
-        self.bykey[ key ][ -1 ] = None
-
-    def getFrontier( self ):
-        while len( self.best ) > 0 and self.best[ 0 ][ -1 ] is None:
-            heapq.heappop( self.best )
-        if len( self.best ) > 0:
-            return [ self.best[ 0 ][ -2: ] ]
-        return None
-
-class ParetoSpaceND:
-    Point = namedtuple( "Point", "key coords parent children" )
-
-    def __init__( self, lt ):
-        self.root = ParetoSpaceND.Point( None, None, [ None ], list() )
-        self.points = dict()
-        self.lt = lt
-
-    def dominates( self, a, b ):
-        better = False
-        for x, y in zip( a, b ):
-            if self.lt( x, y ):
-                return False
-            elif not better and self.lt( y, x ):
-                better = True
-        return better
-
-    def _insert( self, worklist ):
-        while len( worklist ) > 0:
-            parent, _, p = worklist.pop()
-            is_dominant = False
-            collected = list()
-            for i, q in enumerate( parent.children ):
-                if not is_dominant and self.dominates( q.coords, p.coords ):
-                    p.parent[ 0 ] = q
-                    q.children.append( p )
-                    #random.shuffle( parent.children )
-                    #worklist.append( ( q, 0, p ) )
-                    break
-                elif self.dominates( p.coords, q.coords ):
-                    collected.append( i )
-                    q.parent[ 0 ] = p
-                    p.children.append( q )
-                    is_dominant = True
-            else:
-                for i in reversed( collected ):
-                    del parent.children[ i ]
-                p.parent[ 0 ] = parent
-                parent.children.append( p )
-                random.shuffle( parent.children )
-
-    def add( self, key, coords ):
-        p = ParetoSpaceND.Point( key, coords, [ None ], list() )
-        self.points[ key ] = p
-        self._insert( [ ( self.root, 0, p ) ] )
-
-    def remove( self, key ):
-        p = self.points[ key ]
-        del self.points[ key ]
-        parent = p.parent[ 0 ]
-        i = [ i for i, q in enumerate( parent.children ) if p.key == q.key ][ 0 ]
-        del parent.children[ i ]
-
-        self._insert( [ ( parent, i, q ) for q in p.children ] )
-
-    def getFrontier( self ):
-        return [ ( p.key, p.coords ) for p in self.root.children ]
-
-class ParetoSpace:
-    def __init__( self ):
-        self.delegate = None
-
-    def dominates( self, a, b ):
-        if self.delegate is not None:
-            return self.delegate.dominates( a, b )
-
-    def add( self, key, value ):
-        if self.delegate is None:
-            if options.no_confidence:
-                lt = lambda a, b: float( a ) < float( b )
-            else:
-                lt = lambda a, b: a < b
-            if len( value ) == 1:
-                self.delegate = ParetoSpace1D( lt )
-            else:
-                self.delegate = ParetoSpaceND( lt )
-        self.delegate.add( key, value )
-
-    def remove( self, key ):
-        if self.delegate is not None:
-            self.delegate.remove( key )
-
-    def getFrontier( self ):
-        if self.delegate is not None:
-            return self.delegate.getFrontier()
-        return list()
-
 # Since the search may have been multi-objective, we keep track of the best
 # variants in a Pareto space.
 
-best       = ParetoSpace()
+if options.no_confidence:
+    best = ParetoSpace( lambda a, b: float( a ) < float( b ) )
+else:
+    best = ParetoSpace( lambda a, b: a < b )
 numEntries = 0
 zeros      = 0
 original   = None
