@@ -43,6 +43,8 @@ class BlackscholesTest( ParallelTest ):
                 values = list()
                 for line in fh:
                     values.append( float( line.strip() ) )
+                    if np.isnan( values[ -1 ] ):
+                        return None
             except ValueError:
                 return None
         if len( values ) != count:
