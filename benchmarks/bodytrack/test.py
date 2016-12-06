@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import numpy as np
 import os
 import sys
 
@@ -40,8 +41,40 @@ class BodytrackTest( ParallelTest ):
         cmd += [ "0", "1" ]
         return cmd, dict()
 
-    def getGolden( self ):
-        return "outputs/%s" % self.size
+    def getParallelFitness( self, *args ):
+        results = ParallelTest.getParallelFitness( self, *args )
+        if self.options.error:
+            if results == [ [ 0 ] ]:
+                return [ [ 0 ], [ 0 ] ]
+            results.append( self.error )
+        return results
+
+    def _getPoses( self, dname ):
+        fname = os.path.join( dname, "poses.txt" )
+        if not os.path.exists( fname ):
+            return None
+        poses = list()
+        with open( fname ) as fh:
+            try:
+                for line in fh:
+                    poses.append( map( float, line.split() ) )
+            except ValueError:
+                return None
+        return np.array( poses )
+
+    def diff( self, golden, actual ):
+        if not self.options.error:
+            return ParallelTest.diff( self, golden, actual )
+        golden = self._getPoses( golden )
+        self.error = list()
+        for fname in actual:
+            values = self._getPoses( fname )
+            if values is None or values.shape != golden.shape:
+                self.error.append( 0 )
+            else:
+                rmse = np.sqrt( np.mean( ( golden - values ) ** 2 ) )
+                self.error.append( 1.0 / ( 1 + rmse ) )
+        return True
 
 BodytrackTest().run( root )
 
