@@ -218,7 +218,12 @@ def get_improvement( logfile ):
 # Get the test command for this scenario
 ########
 
-test_cmd = TestCmd( configfile if options.config is None else options.config )
+if options.config is None:
+    test_cmd = TestCmd( configfile )
+    input_size = test_cmd.getInput()
+else:
+    test_cmd = TestCmd( options.config )
+    input_size = TestCmd( configfile ).getInput()
 
 ########
 # Get the best genomes from the search...
@@ -271,8 +276,8 @@ def process_genome( best ):
 # Maximize the genome for all inputs
 ########
 
-    if test_cmd.getInput() not in options.inputs:
-        options.inputs = [ test_cmd.getInput() ] + options.inputs
+    if input_size not in options.inputs:
+        options.inputs = [ input_size ] + options.inputs
     infomsg( "INFO: maximizing genome for inputs:", *options.inputs )
     with saving( "multi.cache" ):
         for test_input in options.inputs:
