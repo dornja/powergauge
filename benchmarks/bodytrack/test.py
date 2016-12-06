@@ -57,7 +57,10 @@ class BodytrackTest( ParallelTest ):
         with open( fname ) as fh:
             try:
                 for line in fh:
-                    poses.append( map( float, line.split() ) )
+                    pose = map( float, line.split() )
+                    if np.any( np.isnan( pose ) | np.isinf( pose ) ):
+                        return None
+                    poses.append( pose )
             except ValueError:
                 return None
         return np.array( poses )
