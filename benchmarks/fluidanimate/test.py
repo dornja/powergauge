@@ -7,7 +7,7 @@ root = os.path.abspath( sys.argv[ 0 ] )
 for i in range( 3 ):
     root = os.path.dirname( root )
 sys.path.append( os.path.join( root, "lib" ) )
-from testutil import ParallelTest
+from testutil import Multitmp, ParallelTest
 
 # Run test.py -h to get usage information
 
@@ -24,6 +24,31 @@ class FluidanimateTest( ParallelTest ):
         }[ self.size ]
         cmd += [ outfile ]
         return cmd, dict()
+
+    def getParallelFitness( self, *args ):
+        results = ParallelTest.getParallelFitness( self, *args )
+        if self.options.error:
+            if results == [ [ 0 ] ]:
+                return [ [ 0 ], [ 0 ] ]
+            results.append( self.error )
+        return results
+
+    def diff( self, golden, actual ):
+        if not self.options.error:
+            return ParallelTest.diff( self, golden, actual )
+
+        with Multitmp( len( actual ) ) as count:
+            Multitmp.check_call(
+                [ "./hamming", golden, actual ],
+                stdout = count, verbose = self.options.verbose
+            )
+            self.error = list()
+            for fname in count:
+                with open( fname ) as fh:
+                    for line in fh:
+                        self.error.append( 1.0 / ( 1 + float( line.strip() ) ) )
+                        break
+        return True
 
 FluidanimateTest().run( root )
 
