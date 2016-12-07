@@ -5,12 +5,14 @@ from difflib import SequenceMatcher
 import numpy as np
 from optparse import OptionParser
 import os
-import shelve
 from scipy.stats import mannwhitneyu
+import shelve
 import shutil
+import socket
 from subprocess import call, check_call, CalledProcessError
 import sys
 import tempfile
+import time
 
 root = os.path.dirname( os.path.dirname( os.path.abspath( sys.argv[ 0 ] ) ) )
 sys.path.append( os.path.join( root, "lib" ) )
@@ -109,6 +111,7 @@ def get_genes( sequence ):
 class GenomeBuilder:
     def __init__( self, genprog ):
         self.genprog = genprog
+        self.hostname = socket.gethostname()
 
     @contextmanager
     def build( self, genome ):
@@ -124,7 +127,7 @@ class GenomeBuilder:
             yield None
 
     def key( self, genome ):
-        return " ".join( get_genes( genome ) )
+        return self.hostname + ": " + " ".join( get_genes( genome ) )
 
 class DDGenome( DD ):
     def __init__( self, genprog, builder, deltas ):
@@ -133,6 +136,7 @@ class DDGenome( DD ):
         self.genprog = genprog
         if options.disable_cache:
             self.cache_outcomes = 0
+        self.duration = 0
 
         infomsg( "INFO: computing optimized energy usage" )
         self.optimized = np.array( self.get_fitness( deltas ) )
@@ -144,25 +148,35 @@ class DDGenome( DD ):
         global cache
         key = self.builder.key( deltas )
         if key in cache:
-            return cache[ key ]
-        with self.builder.build( deltas ) as exe:
-            if exe is None:
-                if not options.disable_cache:
-                    cache[ key ] = list()
-                return list()
-            def tester():
-                for line in self.genprog.run_test( exe ):
-                    infomsg( "   ", *line, sep = "\t" )
-                    yield line
-            fitness = list()
-            for values in reduce_error( tester, options.low_error, 20 ):
-                if np.any( values == 0 ):
-                    fitness = [ np.zeros( len( values ) ) ]
-                    break
-                fitness.append( values )
-            if not options.disable_cache:
-                cache[ key ] = fitness
+            fitness, duration = cache[ key ]
+            self.duration += duration
             return fitness
+
+        fitness = list()
+        start = time.time()
+        try:
+            with self.builder.build( deltas ) as exe:
+                if exe is None:
+                    return fitness
+                def tester():
+                    for line in self.genprog.run_test( exe ):
+                        infomsg( "   ", *line, sep = "\t" )
+                        yield line
+                fitness = list()
+                for values in reduce_error( tester, options.low_error, 20 ):
+                    if np.any( values == 0 ):
+                        fitness = [ np.zeros( len( values ) ) ]
+                        break
+                    fitness.append( values )
+                return fitness
+        finally:
+            duration = time.time() - start
+            self.duration += duration
+            if not options.disable_cache:
+                cache[ key ] = fitness, duration
+
+    def get_runtime( self ):
+        return self.duration
 
     def _test( self, deltas ):
         # "Passing" behavior is more like the original (slower, more energy).
@@ -247,6 +261,7 @@ with get_cache() as cache:
     if len( deltas ) == 0:
         base = [ 1 ]
         optim = [ 1 ]
+        runtime = 0
     else:
         dd = DDGenome( genprog, builder, deltas )
         if options.search == "brute":
@@ -267,11 +282,13 @@ with get_cache() as cache:
         infomsg( "simplified genome:\n   ", *get_genes( deltas ) )
         base = np.mean( dd.get_fitness( [] ), axis = 0 )
         optim = np.mean( dd.get_fitness( deltas ), axis = 0 )
+        runtime = dd.get_runtime()
     for i in range( len( optim ) ):
         if optim[ i ] != 0:
             infomsg( "improvement:", 1 - base[ i ] / optim[ i ] )
         else:
             infomsg( "fitness:    ", base[ i ] )
+    infomsg( "minimization time: %4.3fs" % runtime )
 
 if options.save_binary is not None or options.save_sources is not None:
     with builder.build( deltas ) as exe:
