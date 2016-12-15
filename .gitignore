@@ -11,8 +11,9 @@ benchmarks/*/src
 benchmarks/blender/build
 benchmarks/blender/multi.txt
 bin/diff-img
-bin/limit
 bin/getcpu
+bin/hamming
+bin/limit
 pintool/obj-*
 
 src/diff-img-src/Makefile

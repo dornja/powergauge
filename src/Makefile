@@ -6,6 +6,7 @@ CFLAGS=-O3
 
 all:
 all: $(root)/../bin/limit
+all: $(root)/../bin/hamming
 all: $(root)/../bin/getcpu
 all: $(root)/../bin/diff-img
 
