@@ -38,7 +38,7 @@ class FreqmineTest( ParallelTest ):
             return ParallelTest.diff( self, golden, actual )
         with Multitmp( len( actual ) ) as result:
             Multitmp.check_call(
-                [ "./freqdiff", golden, actual ],
+                [ os.path.join( root, "bin", "hamming" ), golden, actual ],
                 stdout = result, verbose = self.options.verbose
             )
             self.error = list()
