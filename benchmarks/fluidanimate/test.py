@@ -39,7 +39,7 @@ class FluidanimateTest( ParallelTest ):
 
         with Multitmp( len( actual ) ) as count:
             Multitmp.check_call(
-                [ "./hamming", golden, actual ],
+                [ os.path.join( root, "bin", "hamming" ), golden, actual ],
                 stdout = count, verbose = self.options.verbose
             )
             self.error = list()
