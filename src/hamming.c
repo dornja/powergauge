@@ -51,8 +51,6 @@ main( int argc, char ** argv )
     while ( n1 > 0 && n2 > 0 && n1 == n2 ) {
         n1 = fread( chunk1, 1, CHUNK_SIZE, fh1 );
         n2 = fread( chunk2, 1, CHUNK_SIZE, fh2 );
-        if ( n1 == 0 || n2 == 0 )
-            break;
         n = n1 < n2 ? n1 : n2;
         for ( i = 0; i < n; ++i )
             distance += hamming( chunk1[ i ], chunk2[ i ] );
