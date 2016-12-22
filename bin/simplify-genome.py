@@ -48,6 +48,10 @@ parser.add_option(
     help = "repeat measurements until (standard error / mean) < (1+p)"
 )
 parser.add_option(
+    "--save-binaries", action = "store_true",
+    help = "save the sources and binaries after minimization"
+)
+parser.add_option(
     "--search-csv", metavar = "csv",
     help = "use the named CSV file to cache search results"
 )
@@ -306,7 +310,9 @@ def process_genome( best ):
             min_genome = this_genome + ".min"
             min_binary = min_genome + ".bin"
             min_source = min_genome + ".src"
-            fnames = [ min_genome, min_binary, min_source ]
+            fnames = [ min_genome ]
+            if options.save_binaries:
+                fnames += [ min_binary, min_source ]
             if options.force or any(
                     [ not os.path.exists( f ) for f in fnames ]
                 ):
@@ -314,10 +320,13 @@ def process_genome( best ):
                     cmd = [
                         minimize, genprog, config,
                             "--genome-file", this_genome,
-                            "--save-binary", min_binary,
                             "--save-genome", min_genome,
-                            "--save-sources", min_source
                     ]
+                    if options.save_binaries:
+                        cmd += [
+                            "--save-binary", min_binary,
+                            "--save-sources", min_source,
+                        ]
                     if options.low_error is not None:
                         cmd += [ "--low-error", str( options.low_error ) ]
                     check_call( cmd )
