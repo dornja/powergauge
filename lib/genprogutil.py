@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-from collections import namedtuple
+from collections import namedtuple, MutableMapping
 from contextlib import contextmanager
 import os
 import re
@@ -10,15 +10,61 @@ import tempfile
 
 from util import infomsg, mktemp
 
+class LazyConfig( MutableMapping ):
+    def __init__( self, entrysource ):
+        self.entrysource = entrysource
+        self.data = dict()
+        self.history = set()
+
+    @classmethod
+    def load( cls, fname ):
+        def readfile( fname ):
+            with open( fname ) as fh:
+                for line in fh:
+                    terms = line.strip().split( None, 1 )
+                    if len( terms ) == 1:
+                        yield terms[ 0 ], None
+                    else:
+                        yield terms[ 0 ], terms[ 1 ]
+        return cls( readfile( fname ) )
+
+    def _consumeItems( self ):
+        for k, v in self.entrysource:
+            if k in self.history:
+                continue
+            self[ k ] = v
+            yield k, v
+
+    def __getitem__( self, key ):
+        if not key in self.history:
+            for k, v in self._consumeItems():
+                if k == key:
+                    break
+        return self.data[ key ]
+
+    def __setitem__( self, key, value ):
+        self.history.add( key )
+        self.data[ key ] = value
+
+    def __delitem__( self, key ):
+        if not key in self.history:
+            _ = self[ key ]
+        del self.data[ key ]
+
+    def __len__( self ):
+        for k, v in self._consumeItems():
+            pass
+        return len( self.data )
+
+    def __iter__( self ):
+        for k in iter( self.data ):
+            yield k
+        for k, _ in self._consumeItems():
+            yield k
+
 class Config( dict ):
     def load( self, fname ):
-        with open( fname ) as fh:
-            for line in fh:
-                terms = line.strip().split( None, 1 )
-                if len( terms ) == 1:
-                    self[ terms[ 0 ] ] = None
-                else:
-                    self[ terms[ 0 ] ] = terms[ 1 ]
+        self.update( LazyConfig.load( fname ) )
 
 class GenProgEnv:
     def __init__( self, genprog, configfile ):
@@ -159,9 +205,11 @@ class LogParser:
 
         self.stream = self._getLine( stream )
         self.max_count = max_variants
-        self.fitness = list()
-        self.config = list()
-        self.debug = list()
+        self.fitness_q = list()
+        self.config_q = list()
+        self.debug_q = list()
+
+        self.config = None
 
         next( self.stream )
 
@@ -202,10 +250,10 @@ class LogParser:
                     prev = term
                 if len( intervals ) < len( fitnesses ):
                     intervals.append( 0 )
-                fitness = tuple( [
+                fitness_q = tuple( [
                     Interval( m, d ) for m, d in zip( fitnesses, intervals )
                 ] )
-                self.fitness.append( Entry( gen, count, fitness, variant ) )
+                self.fitness_q.append( Entry( gen, count, fitness_q, variant ) )
                 if go_until & self.FITNESS != 0:
                     go_until = yield
                 continue
@@ -214,11 +262,11 @@ class LogParser:
                 gen = int( m.group( 1 ) )
                 continue
             if line.startswith( "--" ):
-                self.config.append( line.split( None, 1 ) )
+                self.config_q.append( line.split( None, 1 ) )
                 if go_until & self.CONFIG != 0:
                     go_until = yield
                 continue
-            self.debug.append( line )
+            self.debug_q.append( line )
             if go_until & self.DEBUG != 0:
                 go_until = yield
 
@@ -236,15 +284,18 @@ class LogParser:
                     break
 
     def getConfig( self ):
-        for entry in self._consumer( self.config, self.CONFIG ):
-            yield entry
+        if self.config is None:
+            self.config = LazyConfig(
+                self._consumer( self.config_q, self.CONFIG )
+            )
+        return self.config
 
     def getDebug( self ):
-        for entry in self._consumer( self.debug, self.DEBUG ):
+        for entry in self._consumer( self.debug_q, self.DEBUG ):
             yield entry
 
     def getEntries( self ):
-        for entry in self._consumer( self.fitness, self.FITNESS ):
+        for entry in self._consumer( self.fitness_q, self.FITNESS ):
             yield entry
 
 def lower_genome( genes ):
