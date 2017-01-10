@@ -276,7 +276,12 @@ if options.csv is None:
         print "original values:      ", show_fitness( orig_values, orig_values )
     print "Pareto frontier:"
     for e in sorted( bestFilter( [] ), key = lambda e: float( e.fitness[ 0 ] ) ):
-        best_values = [ 1 / x - 1 for x in e.fitness ]
+        best_values = list()
+        for x in e.fitness:
+            if float( x ) == 0:
+                best_values.append( np.inf )
+            else:
+                best_values.append( 1 / x - 1 )
         print "    best values:      ", show_fitness( best_values, orig_values )
     print "variants considered:  ", numEntries
     print "unique variants:      ", len( unique )
