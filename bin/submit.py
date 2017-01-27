@@ -6,7 +6,9 @@ from optparse import OptionParser
 import os
 from subprocess import PIPE, Popen
 
-parser = OptionParser( usage = "%prog [options] results-name configfile" )
+parser = OptionParser(
+    usage = "%prog [options] results-name configfile [-- slurm options]"
+)
 parser.add_option(
     "--bmark", metavar = "bmark", help = "benchmark to run"
 )
@@ -16,8 +18,9 @@ if len( args ) < 2:
     parser.print_help()
     exit()
 
-results = args[ 0 ]
-config  = args[ 1 ]
+results   = args[ 0 ]
+config    = args[ 1 ]
+slurmopts = args[ 2: ]
 
 if options.bmark is None:
     if os.path.basename( os.path.dirname( os.getcwd() ) ) == "benchmarks":
@@ -36,7 +39,7 @@ print >>script, "EOF"
 # always submit from the home directory...
 
 os.chdir( os.path.expanduser( "~" ) )
-p = Popen( [ "sbatch", "--exclusive" ], stdin = PIPE )
+p = Popen( [ "sbatch", "--exclusive" ] + slurmopts, stdin = PIPE )
 p.communicate( script.getvalue() )
 p.wait()
 exit( p.returncode )
