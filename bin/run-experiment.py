@@ -1,19 +1,20 @@
 #!/usr/bin/python
-#SBATCH --exclusive
 
-import datetime
-import glob
-import optparse
+import base64
+from cStringIO import StringIO
+from datetime import datetime
+from glob import glob
+from optparse import OptionParser
 import os
 import socket
-import subprocess
+from subprocess import call, check_call, PIPE, Popen
 import sys
 
 root = os.path.dirname( os.path.dirname( os.path.abspath( sys.argv[ 0 ] ) ) )
 sys.path.append( os.path.join( root, "lib" ) )
 import genprogutil
 
-parser = optparse.OptionParser( "%prog [options] benchmark" )
+parser = OptionParser( "%prog [options] benchmark" )
 options, args = parser.parse_args()
 
 if len( args ) < 1:
@@ -23,32 +24,45 @@ if len( args ) < 1:
 benchmark = args[0]
 parsecdir = "/localtmp/sources/" + benchmark + "/"
 
-# log start timestamp
-# log the git hash and hostname to a file
-time = datetime.datetime.now()
+# Get the time we started. We'll actually write it to the log file later, once
+# we have a workspace to work in. For debugging, print it to stdout here in case
+# things go horribly wrong....
+
+start = datetime.now()
 hostname = socket.gethostname()
-p = subprocess.Popen( [ "git", "rev-parse", "HEAD" ], stdout = subprocess.PIPE )
-githash = p.communicate()[ 0 ]
-with open( "experiment.log" ) as logfile:
-    print >> logfile, time
-    print >> logfile, hostname
-    print >> logfile, githash
+
+print start
+print "Running experiment on", hostname
+
+# Read the config file from stdin. Do this first, just in case one of the
+# subprocesses we create tries to read from stdin...
+config = StringIO()
+base64.decode( sys.stdin, config )
 
 # clone clean repo
-os.chdir( "/localtmp/" )
 jobid = os.environ[ "SLURM_JOB_ID" ]
-subprocess.check_call( [ "git", "clone", "powergauge", jobid ] )
-    
+check_call( [ "git", "clone", "/localtmp/powergauge", "/localtmp/" + jobid ] )
+
+os.chdir( "/localtmp/%s/benchmarks/%s" % ( jobid, benchmark ) )
+
+# log start timestamp, the git hash and hostname to a file
+with open( "experiment.log" ) as logfile:
+    print >> logfile, start
+    print >> logfile, hostname
+    call( [ "git", "rev-parse", "HEAD" ], stdout = logfile )
+
+# create the config file
+with open( "configuration" ) as fh:
+    print >>fh, config.getvalue()
+
 # Make in src
-os.chdir(jobid)
-subprocess.check_call( [ "make", "-C", "src" ] )
+check_call( [ "make", "-C", "../../src" ] )
 
 # copy sources/input based on passed in benchmark
-os.chdir( "benchmarks/" + benchmark )
-subprocess.check_call( [ "rsync", "-a", parsecdir, "." ] )
+check_call( [ "rsync", "-a", parsecdir, "." ] )
 
 # Sanity check compile with a test input and create golden
-subprocess.check_call( [ "./compile.sh", "src/.", "exe" ] )
+check_call( [ "./compile.sh", "src/.", "exe" ] )
 
 config = genprogutil.Config()
 config.load( "configuration" )
@@ -57,8 +71,8 @@ testcmd = testcmd.replace( "__EXE_NAME__", "exe" )
 testcmd = testcmd.replace( "__FITNESS_FILE__", "/dev/null" )
 testcmd = testcmd.split()
 testcmd.append( "--create-golden" )
-subprocess.call( testcmd )
-if len( glob.glob( "outputs/*" ) ) < 1:
+call( testcmd )
+if len( glob( "outputs/*" ) ) < 1:
     print "ERROR: Sanity check failed, golden not found"
     exit( 1 )
 
