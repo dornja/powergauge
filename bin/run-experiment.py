@@ -5,6 +5,7 @@ import datetime
 import glob
 import optparse
 import os
+import socket
 import subprocess
 import sys
 
@@ -12,7 +13,7 @@ root = os.path.dirname( os.path.dirname( os.path.abspath( sys.argv[ 0 ] ) ) )
 sys.path.append( os.path.join( root, "lib" ) )
 import genprogutil
 
-parser = optparse.OptionParser("%prog [options] benchmark")
+parser = optparse.OptionParser( "%prog [options] benchmark" )
 options, args = parser.parse_args()
 
 if len( args ) < 1:
@@ -22,10 +23,21 @@ if len( args ) < 1:
 benchmark = args[0]
 parsecdir = "/localtmp/sources/" + benchmark + "/"
 
+# log start timestamp
+# log the git hash and hostname to a file
+time = datetime.datetime.now()
+hostname = socket.gethostname()
+p = subprocess.Popen( [ "git", "rev-parse", "HEAD" ], stdout = subprocess.PIPE )
+githash = p.communicate()[ 0 ]
+with open( "experiment.log" ) as logfile:
+    print >> logfile, time
+    print >> logfile, hostname
+    print >> logfile, githash
+
 # clone clean repo
-os.chdir("/localtmp/")
-jobid = os.environ["SLURM_JOB_ID"]
-subprocess.check_call(["git", "clone", "powergauge", jobid])
+os.chdir( "/localtmp/" )
+jobid = os.environ[ "SLURM_JOB_ID" ]
+subprocess.check_call( [ "git", "clone", "powergauge", jobid ] )
     
 # Make in src
 os.chdir(jobid)
@@ -47,10 +59,8 @@ testcmd = testcmd.split()
 testcmd.append( "--create-golden" )
 subprocess.call( testcmd )
 if len( glob.glob( "outputs/*" ) ) < 1:
+    print "ERROR: Sanity check failed, golden not found"
     exit( 1 )
-
-# log start timestamp
-# log the git hash and hostname to a file
 
 
 # modify/deal with the config file
