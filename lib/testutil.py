@@ -8,6 +8,7 @@ from optparse import OptionGroup, OptionParser
 import os
 import platform
 from scipy.special import gamma
+import socket
 from subprocess import call, check_call, Popen, CalledProcessError
 import sys
 from util import infomsg, mktemp
@@ -209,6 +210,18 @@ class BasicMetric:
 class EmonMetric( BasicMetric ):
     def __init__( self, root, options ):
         BasicMetric.__init__( self, False )
+
+        mappingfile = os.path.join( root, "etc", "host-emon-mapping.txt" )
+        host = socket.gethostname()
+        with open( mappingfile ) as fh:
+            keys = next( fh ).split()
+            for line in fh:
+                line = dict( zip( keys, line.split() ) )
+                if len( line ) == 0:
+                    continue
+                if line[ "host" ] == host:
+                    options = line["emon"], line["port"], line["channel"]
+
         self.prefix = \
             [ os.path.join( root, "bin", "emon.py" ) ] + list( options )
 
