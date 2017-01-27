@@ -11,6 +11,8 @@ all: $(root)/../bin/getcpu
 all: $(root)/../bin/hamming
 all: $(root)/../bin/diff-img
 
+freqdiff: LDLIBS=-lm
+
 $(root)/../bin/%: %.c
 	@$(MAKE) --no-print-directory $*
 	mv $* $@
