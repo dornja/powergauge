@@ -16,10 +16,26 @@ import genprogutil
 from util import infomsg
 
 parser = OptionParser( "%prog [options] benchmark results" )
+parser.add_option(
+    "--inputs", metavar = "args", default = list(),
+    help = "comma-separated list of inputs to maximize on (default: empty)"
+)
+parser.add_option(
+    "--no-simplify", action = "store_true",
+    help = "do not minimize pareto frontier"
+)
+parser.add_option(
+    "--stop-after", metavar = "N", type = int,
+    help = "stop the search / minimization after N fitness evaluations"
+)
+parser.add_option(
+    "--use-search", metavar = "resultsdir",
+    help = "use the results of a previous search instead of searching again"
+)
 options, args = parser.parse_args()
 
 if len( args ) < 1:
-    parser.print_usage()
+    parser.print_help()
     exit( 1 )
 
 jobid = os.environ.get( "SLURM_JOB_ID", "0" )
@@ -28,6 +44,10 @@ benchmark = args[ 0 ]
 results = os.path.basename( args[ 1 ] )
 parsecdir = "/localtmp/sources/" + benchmark + "/"
 rundir = "/localtmp/job-" + jobid
+
+genprog = "/localtmp/jad5ju/genprog-code/src/repair"
+simplify = os.path.join( root, "bin", "simplify-genome.py" )
+
 
 # Get the time we started. We'll actually write it to the log file later, once
 # we have a workspace to work in. For debugging, print it to stdout here in case
@@ -51,8 +71,29 @@ check_call( [ "git", "clone", "/localtmp/powergauge", rundir] )
 
 os.chdir( os.path.join( rundir, "benchmarks", benchmark ) )
 
+# Set up the config file for this experiment. Allow the config from the previous
+# search (if any) to override the one passed to this script.
+artifacts = [
+    "configuration",
+    "experiment.log",
+    "multi.cache",
+    "repair.cache",
+]
+if options.use_search is not None:
+    options.use_search = options.use_search.rstrip( "/" )
+    infomsg( "\nINFO: copying previous results" )
+    check_call( [ "rsync", "-a", options.use_search, "." ] )
+    os.rename( os.path.basename( options.use_search ), results )
+    check_call(
+        [ "ln", "-f" ] + [ os.path.join(results, a) for a in artifacts ] + [ "." ]
+    )
+else:
+    # create the config file
+    with open( "configuration", 'w' ) as fh:
+        print >>fh, config.strip()
+
 # log start timestamp, the git hash and hostname to a file
-with open( "experiment.log", 'w' ) as logfile:
+with open( "experiment.log", 'a' ) as logfile:
     print >>logfile, "start time:", start
     print >>logfile, "hostname:  ", hostname
     print >>logfile, "git hash:  ",
@@ -62,10 +103,6 @@ with open( "experiment.log", 'w' ) as logfile:
     except OSError:
         pass
     call( [ "git", "rev-parse", "HEAD" ], stdout = logfile )
-
-# create the config file
-with open( "configuration", 'w' ) as fh:
-    print >>fh, config.strip()
 
 # Make in src
 infomsg( "\nINFO: building C utilities" )
@@ -92,32 +129,45 @@ if len( glob( "outputs/*" ) ) < 1:
     print "ERROR: Sanity check failed, golden not found"
     exit( 1 )
 
-# run genprog
-infomsg( "\nINFO: running GenProg" )
-check_call( [ "/localtmp/jad5ju/genprog-code/src/repair", "configuration" ] )
+if options.use_search is None:
+    # run genprog
+    infomsg( "\nINFO: running GenProg" )
+    check_call( [ genprog, "configuration" ] )
 
-# create dir for artifacts
-os.makedirs( results )
+    # create dir for artifacts
+    os.makedirs( results )
 
-# copy artifacts
-artifacts = [
-    "configuration",
-    "experiment.log",
-    "multi.cache",
-    "repair.cache",
-]
-if "--seed" in config:
-    artifacts.append( "repair.debug." + config[ "--seed" ] )
-else:
-    artifacts += glob( "repair.debug.*" )
-check_call( [ "mv" ] + artifacts + [ results ] )
+    # copy artifacts
+    if "--seed" in config:
+        artifacts.append( "repair.debug." + config[ "--seed" ] )
+    else:
+        artifacts += glob( "repair.debug.*" )
+    check_call( [ "ln" ] + artifacts + [ results ] )
+
+if not options.no_simplify:
+    # minimize genomes on pareto frontier
+    cmd = [ simplify, genprog, results, "--all-variants" ]
+    if options.stop_after is not None:
+        cmd += [ "--stop-after", str( options.stop_after ) ]
+    elif "--max-evals" in config:
+        # don't forget GenProg's built-in off-by-one-error
+        cmd += [ "--stop-after", str( int( config[ "--max-evals" ] ) + 1 ) ]
+    if len( options.inputs ) > 0:
+        cmd += [ "--inputs", options.inputs ]
+    infomsg( "DEBUG: +", *cmd )
+    check_call( cmd )
+
+# log the end time to the logfile
+with open( "experiment.log", 'a' ) as logfile:
+    print >>logfile, "end time:", datetime.now()
 
 # compress and store in some location
-infomsg( "\nINFO: saving results to /localtmp/results/" + results + ".tar.bz2" )
-os.makedirs( "/localtmp/results" )
-check_call( [
-    "tar", "cjf", "/localtmp/results/" + results + ".tar.bz2", results
-] )
+resultsdir = os.path.join( "/localtmp/results", benchmark )
+tarfile = os.path.join( resultsdir, results + ".tar.bz2" )
+
+infomsg( "\nINFO: saving results to", tarfile )
+os.makedirs( resultsdir )
+check_call( [ "tar", "cjf", tarfile, results ] )
 
 infomsg( "\nINFO: cleaning up" )
 os.chdir( os.path.expanduser( "~" ) )
