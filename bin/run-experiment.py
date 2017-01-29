@@ -154,7 +154,6 @@ if not options.no_simplify:
         cmd += [ "--stop-after", str( int( config[ "--max-evals" ] ) + 1 ) ]
     if len( options.inputs ) > 0:
         cmd += [ "--inputs", options.inputs ]
-    infomsg( "DEBUG: +", *cmd )
     check_call( cmd )
 
 # log the end time to the logfile
@@ -166,7 +165,8 @@ resultsdir = os.path.join( "/localtmp/results", benchmark )
 tarfile = os.path.join( resultsdir, results + ".tar.bz2" )
 
 infomsg( "\nINFO: saving results to", tarfile )
-os.makedirs( resultsdir )
+if not os.path.exists( resultsdir ):
+    os.makedirs( resultsdir )
 check_call( [ "tar", "cjf", tarfile, results ] )
 
 infomsg( "\nINFO: cleaning up" )
