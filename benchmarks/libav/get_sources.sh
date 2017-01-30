@@ -49,3 +49,4 @@ rsync -a --delete "$LIBAV/" "$SRC" --exclude "*.c"
 mkdir inputs
 cd inputs
 wget https://media.xiph.org/video/derf/y4m/deadline_cif.y4m
+wget https://media.xiph.org/video/derf/y4m/bus_cif_15fps.y4m

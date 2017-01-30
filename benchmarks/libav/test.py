@@ -33,7 +33,7 @@ class LibavTest( ParallelTest ):
                           "-qscale", "2",       # 1-31
                           "-an",
                           outfile],
-            "prores":  [ "-i", "inputs/eledream_640x360_8.y4m",
+            "prores":  [ "-i", "inputs/bus_cif_15fps.y4m",
                          "-c:v", "prores",
                          "-quant_mat", "proxy", # {proxy, lt, standard, hq}
                          "-profile:v", "proxy", # {proxy, lt, standard, hq}
