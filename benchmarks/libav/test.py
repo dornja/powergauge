@@ -95,12 +95,27 @@ class LibavTest( ParallelTest ):
 
 
     def diff( self, golden, actual):
-        return True
-        # if self.options.error:
-        #     return True
-        # else:
-        #     return ParallelTest.diff( self, golden, actual )
+        if not self.options.error:
+            return ParallelTest.diff( self, golden, actual )
 
+        with Multitmp( len( actual ) ) as result:
+            with open( "/dev/null", 'w' ) as null:
+                diffimg = os.path.join( root, "bin", "diff-img.sh")
+                Multitmp.check_call(
+                    [ diffimg, golden, actual ],
+                    stdout = result, stderr = null,
+                    verbose = self.options.verbose,
+                )
+            errors = list()
+            for fname in result:
+                with open( fname ) as fh:
+                    error = 0
+                    for line in fh:
+                        if line.startswith( "total" ):
+                            error += float( line.split()[ 2 ] )
+                    errors.append( 1 / ( error + 1 ) )
+            self.error = errors
+            return True
 
     def getParallelFitness( self, root, metrics ):
         results = ParallelTest.getParallelFitness( self, root, metrics )
