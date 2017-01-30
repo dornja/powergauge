@@ -64,7 +64,7 @@ class LibavTest( ParallelTest ):
                       "-i", scratch,
                       "-r", "25",
                       "-loglevel", "panic",
-                      "%03d.png"
+                      "%03d.ppm"
                     ],
                     verbose = self.options.verbose,
                     cwd = outfile
