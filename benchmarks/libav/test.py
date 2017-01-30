@@ -28,7 +28,7 @@ class LibavTest( ParallelTest ):
     def getCommand( self, outfile ):
         cmd = [ self.exe ]
         cmd += {
-            "mpeg4":    [ "-i", "inputs/eledream_640x360_8.y4m",
+            "mpeg4":    [ "-i", "inputs/deadline_cif.y4m",
                           "-vtag", "xvid",
                           "-qscale", "2",       # 1-31
                           "-an",
