@@ -135,7 +135,9 @@ if options.use_search is None:
     check_call( [ genprog, "configuration" ] )
 
     # create dir for artifacts
+    mask = os.umask( 0 )
     os.makedirs( results )
+    os.umask( mask )
 
     # copy artifacts
     if "--seed" in config:
