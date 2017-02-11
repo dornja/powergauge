@@ -51,13 +51,14 @@ class BlenderTest( ParallelTest ):
 
     def getCommand( self, outfile ):
         blend, render = {
-            "tiny":   ( [ "inputs/Star-collapse-ntsc.blend" ], [ "--size", "360x240" ] ),
-            "small":  ( [ "inputs/buggy2.1.blend" ], [ "--size", "320x180" ] ),
-            "medium": ( [ "inputs/BMW27GE.blend" ], [ "--size", "240x135" ] ),
-            "large":  ( [ "inputs/Ring_27.blend" ], [ "--size", "256x180" ] ),
-            "huge":   ( [ "inputs/TeeglasFX_27.blend" ], [ "--size", "512x288" ] ),
+            "tiny":   ( "inputs/Star-collapse-ntsc.blend", [ "--size", "360x240" ] ),
+            "small":  ( "inputs/buggy2.1.blend", [ "--size", "320x180" ] ),
+            "medium": ( "inputs/BMW27GE.blend", [ "--size", "240x135" ] ),
+            "large":  ( "inputs/Ring_27.blend", [ "--size", "256x180" ] ),
+            "huge":   ( "inputs/TeeglasFX_27.blend", [ "--size", "512x288" ] ),
         }[ self.size ]
-        cmd = [ self.exe, "-b" ] + blend + [ "-P", "render.py" ]
+        blend = os.path.abspath( blend )
+        cmd = [ self.exe, "-b", blend, "-P", os.path.abspath( "render.py" ) ]
         cmd += [ "--" ] + render + [ outfile ]
         return cmd, dict()
 
