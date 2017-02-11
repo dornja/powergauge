@@ -173,5 +173,7 @@ check_call( [ "tar", "cjf", tarfile, results ] )
 
 infomsg( "\nINFO: cleaning up" )
 os.chdir( os.path.expanduser( "~" ) )
+# make sure the files are writeable before attempting to delete them
+check_call( [ "chmod", "-R", "u+w", rundir ] )
 check_call( [ "rm", "-rf", rundir ] )
 
