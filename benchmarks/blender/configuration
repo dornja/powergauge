@@ -1,3 +1,4 @@
+--EDIT-THESE-FLAGS-BEFORE-RUNNING
 --program multi.txt
 --rep asm
 --prefix src
