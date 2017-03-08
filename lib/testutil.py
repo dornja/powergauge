@@ -8,6 +8,7 @@ from optparse import OptionGroup, OptionParser
 import os
 import platform
 from scipy.special import gamma
+import socket
 from subprocess import call, check_call, Popen, CalledProcessError
 import sys
 from util import infomsg, mktemp
@@ -319,10 +320,33 @@ class ParallelTest:
             usage = "%prog [options] __EXE_NAME__ size __FITNESS_FILE__"
         )
 
+    def _getHostMapping( self, root ):
+        mappingfile = os.path.join( root, "etc", "host-emon-mapping.txt" )
+        host = socket.gethostname()
+        with open( mappingfile ) as fh:
+            keys = next( fh ).split()
+            for line in fh:
+                line = dict( zip( keys, line.split() ) )
+                if len( line ) == 0:
+                    continue
+                if line[ "host" ] == host:
+                    return line
+        return None
+
     def checkArgs( self, parser, args ):
         if len( args ) < 3:
             parser.print_help()
             raise ValueError( "insufficient arguments" )
+
+        if self.options.emon is not None or self.options.cpu is not None:
+            mapping = self._getHostMapping( self.root )
+            if mapping is not None:
+                if self.options.emon is not None:
+                    self.options.emon = [
+                        mapping[ x ] for x in [ "emon", "port", "channel" ]
+                    ]
+                if self.options.cpu is not None:
+                    self.options.cpu = mapping[ "variant-core" ]
 
         use_default = True
         for opt in [ self.options.emon, self.options.time, self.options.wu ]:
@@ -433,6 +457,7 @@ class ParallelTest:
         return results
 
     def run( self, root, argv = sys.argv ):
+        self.root = root
         parser = self.getParser()
         self.addCommonOptions( parser )
 

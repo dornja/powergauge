@@ -28,12 +28,12 @@ class LibavTest( ParallelTest ):
     def getCommand( self, outfile ):
         cmd = [ self.exe ]
         cmd += {
-            "mpeg4":    [ "-i", "inputs/eledream_640x360_8.y4m",
+            "mpeg4":    [ "-i", "inputs/deadline_cif.y4m",
                           "-vtag", "xvid",
                           "-qscale", "2",       # 1-31
                           "-an",
                           outfile],
-            "prores":  [ "-i", "inputs/eledream_640x360_8.y4m",
+            "prores":  [ "-i", "inputs/bus_cif_15fps.y4m",
                          "-c:v", "prores",
                          "-quant_mat", "proxy", # {proxy, lt, standard, hq}
                          "-profile:v", "proxy", # {proxy, lt, standard, hq}
@@ -51,56 +51,51 @@ class LibavTest( ParallelTest ):
             return "outputs/%s%s" % ( self.test, self.getOutputSuffix() )
 
     def validateCorrectness( self, outfile ):
-        correctness = ParallelTest.validateCorrectness( self, outfile )
         if self.options.error:
-            with Multitmp( len( outfile ) ) as outdir:
-                Multitmp.check_call( [ "rm", "-rf", outdir ], verbose = self.options.verbose )
-                Multitmp.check_call( [ "mkdir", outdir ], verbose = self.options.verbose )
+            with Multitmp( len( outfile ) ) as scratch:
+                Multitmp.check_call(
+                    [ "mv", outfile, scratch ], verbose = self.options.verbose
+                )
+                Multitmp.check_call(
+                    [ "mkdir", outfile ], verbose = self.options.verbose
+                )
                 Multitmp.check_call(
                     [ "avconv",
-                      "-i", outfile,
+                      "-i", scratch,
                       "-r", "25",
                       "-loglevel", "panic",
-                      "%03d.png"
+                      "%03d.ppm"
                     ],
                     verbose = self.options.verbose,
-                    cwd = outdir
+                    cwd = outfile
                 )
-                if not ParallelTest.validateCorrectness( self, outdir ):
-                    return False
-                with Multitmp( len( outfile ) ) as result:
-                    with open( "/dev/null", 'w' ) as null:
-                        golden = self.getGolden()
-                        diffimg = os.path.join( root, "bin", "diff-img.sh")
-                        Multitmp.check_call(
-                            [ diffimg,
-                              golden,
-                              outdir
-                            ],
-                            stdout = result, stderr = null,
-                            verbose = self.options.verbose,
-                        )
-                    errors = list()
-                    for fname in result:
-                        with open( fname ) as fh:
-                            error = 0
-                            for line in fh:
-                                if line.startswith( "total" ):
-                                    error += float( line.split()[ 2 ] )
-                            errors.append( 1 / ( error + 1 ) )
-                    self.error = errors
-                    return True
+                return ParallelTest.validateCorrectness( self, outfile )
         else:
-            return correctness
+            return ParallelTest.validateCorrectness( self, outfile )
 
 
     def diff( self, golden, actual):
-        return True
-        # if self.options.error:
-        #     return True
-        # else:
-        #     return ParallelTest.diff( self, golden, actual )
+        if not self.options.error:
+            return ParallelTest.diff( self, golden, actual )
 
+        with Multitmp( len( actual ) ) as result:
+            with open( "/dev/null", 'w' ) as null:
+                diffimg = os.path.join( root, "bin", "diff-img.sh")
+                Multitmp.check_call(
+                    [ diffimg, golden, actual ],
+                    stdout = result, stderr = null,
+                    verbose = self.options.verbose,
+                )
+            errors = list()
+            for fname in result:
+                with open( fname ) as fh:
+                    error = 0
+                    for line in fh:
+                        if line.startswith( "total" ):
+                            error += float( line.split()[ 2 ] )
+                    errors.append( 1 / ( error + 1 ) )
+            self.error = errors
+            return True
 
     def getParallelFitness( self, root, metrics ):
         results = ParallelTest.getParallelFitness( self, root, metrics )

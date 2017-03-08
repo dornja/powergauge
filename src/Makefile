@@ -6,9 +6,12 @@ CFLAGS=-O3
 
 all:
 all: $(root)/../bin/limit
-all: $(root)/../bin/hamming
+all: $(root)/../bin/freqdiff
 all: $(root)/../bin/getcpu
+all: $(root)/../bin/hamming
 all: $(root)/../bin/diff-img
+
+freqdiff: LDLIBS=-lm
 
 $(root)/../bin/%: %.c
 	@$(MAKE) --no-print-directory $*

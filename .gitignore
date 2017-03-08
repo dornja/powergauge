@@ -11,6 +11,7 @@ benchmarks/*/src
 benchmarks/blender/build
 benchmarks/blender/multi.txt
 bin/diff-img
+bin/freqdiff
 bin/getcpu
 bin/hamming
 bin/limit

@@ -1,3 +1,4 @@
+--EDIT-THESE-FLAGS-BEFORE-RUNNING
 --program src/swaptions.s
 --program multi.txt
 --rep asm
