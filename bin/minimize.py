@@ -164,7 +164,7 @@ class DDGenome( DD ):
                         yield line
                 fitness = list()
                 for values in reduce_error( tester, options.low_error, 20 ):
-                    if np.any( values == 0 ):
+                    if any( [ v == 0 for v in values ] ):
                         fitness = [ np.zeros( len( values ) ) ]
                         break
                     fitness.append( values )
