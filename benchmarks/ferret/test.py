@@ -3,9 +3,18 @@ from __future__ import division
 
 import os
 import sys
+import tempfile
 from scipy import stats
 from math import isnan, isinf
 from numpy import isclose
+from subprocess import check_call, call
+
+root = os.path.abspath( sys.argv[ 0 ] )
+for i in range( 3 ):
+    root = os.path.dirname( root )
+sys.path.append( os.path.join( root, "lib" ) )
+from testutil import Multitmp, ParallelTest
+from util import mktemp
 
 root = os.path.abspath( sys.argv[ 0 ] )
 for i in range( 3 ):
@@ -16,12 +25,34 @@ from testutil import ParallelTest
 # Run test.py -h to get usage information
 
 class FerretTest( ParallelTest ):
+    def __init__( self, *args ):
+        self.__backup = None
+        ParallelTest.__init__( self, *args )
+
+    def __del__( self ):
+        if self.__backup is not None:
+            call( [ "rm", "-rf", self.__backup ] )
+
+    def _getInputDir( self ):
+        return {
+            "test":   "inputs/input_test",
+            "tiny":   "inputs/input_dev",
+            "small":  "inputs/input_small",
+            "medium": "inputs/input_medium",
+            "large":  "inputs/input_large",
+            "huge":   "inputs/input_native",
+        }[ self.size ]
+
+    def checkArgs( self, *args ):
+        result = ParallelTest.checkArgs( self, *args )
+        self.__backup = tempfile.mkdtemp()
+        check_call( [
+            "rsync", "-a", self._getInputDir(), self.__backup
+        ] )
+        return result
+
     def getCommand( self, outfile ):
-        inputdir = "inputs/input_%s" % self.size
-        if self.size == "tiny":
-            inputdir = "inputs/input_dev"
-        if self.size == "huge":
-            inputdir = "inputs/input_native"
+        inputdir = self._getInputDir()
         cmd = [ self.exe, "%s/corel" % inputdir, "lsh", "%s/queries" % inputdir ]
         cmd += {
             "test":   [  "5",  "5", "1" ],
@@ -169,6 +200,9 @@ class FerretTest( ParallelTest ):
 
     def getParallelFitness( self, root, metrics ):
         results = ParallelTest.getParallelFitness( self, root, metrics )
+        check_call( [
+            "rsync", "-a", self.__backup, self._getInputDir()
+        ])
         if self.options.error:
             if results == [ [ 0 ] ]:
                 return [ [ 0 ], [ 0 ] ]
