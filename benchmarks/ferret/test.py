@@ -47,7 +47,7 @@ class FerretTest( ParallelTest ):
         result = ParallelTest.checkArgs( self, *args )
         self.__backup = tempfile.mkdtemp()
         check_call( [
-            "rsync", "-a", self._getInputDir(), self.__backup
+            "rsync", "-a", self._getInputDir() + "/", self.__backup
         ] )
         return result
 
@@ -201,7 +201,7 @@ class FerretTest( ParallelTest ):
     def getParallelFitness( self, root, metrics ):
         results = ParallelTest.getParallelFitness( self, root, metrics )
         check_call( [
-            "rsync", "-a", self.__backup, self._getInputDir()
+            "rsync", "-a", self.__backup + "/", self._getInputDir()
         ])
         if self.options.error:
             if results == [ [ 0 ] ]:
