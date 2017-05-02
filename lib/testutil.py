@@ -49,7 +49,7 @@ def reduce_error( f, alpha, probes = 5 ):
                     M2   = np.zeros( len( x ) )
                     errp = np.zeros( len( x ) )
                 if len( errp ) < len( x ):
-                    infomsg( "warning: change in fitness dimnsions!" )
+                    infomsg( "warning: change in fitness dimensions!" )
                     return
                 if np.all( x == 0 ):
                     infomsg( "warning: 0 fitness: terminating evaluation" )
