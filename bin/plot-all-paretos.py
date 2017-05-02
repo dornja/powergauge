@@ -53,14 +53,20 @@ parser.add_option(
     help = "figure size in inches"
 )
 parser.add_option(
-    "--stop-after", metavar = "N", type = int,
+    "--stop-after", metavar = "N",
     help = "stop processing logfiles after the first N entries"
 )
 parser.add_option(
     "--xlab", metavar = "label", help = "set X-axis label for figures"
 )
 parser.add_option(
+    "--xlim", metavar = "min,max", help = "set range for X-axis"
+)
+parser.add_option(
     "--ylab", metavar = "label", help = "set Y-axis label for figures"
+)
+parser.add_option(
+    "--ylim", metavar = "min,max", help = "set range for Y-axis"
 )
 parser.add_option(
     "--debug-improvement", action = "store_true",
@@ -120,6 +126,26 @@ def collectFiles( flag, globpat, msg ):
         collateral[ results ][ flag ] = fnames[ 0 ]
 
 def getCondition( fname ):
+    conds = os.path.basename( fname ).split( "-" )[ -3:-1 ]
+    while len( conds ) > 0:
+        try:
+            condition = {
+                "txt":     "baseline",
+                "uniform": "reductions",
+                "line":    "profile",
+                "asm-line":     "profile+reduction",
+                "asm-uniform":  "profile",
+                "txt-line":     "reductions",
+                "txt-uniform":  "baseline",
+            }[ "-".join( conds ) ]
+            return condition
+        except KeyError:
+            conds = conds[ :-1 ]
+    infomsg( "warning: could not determine condition for", fname,
+        "-".join( os.path.basename( fname ).split( "-" )[ -3:-1 ] )
+    )
+    return ""
+
     try:
         condition = {
             "txt":     "baseline",
@@ -127,7 +153,9 @@ def getCondition( fname ):
             "line":    "profile",
         }[ os.path.basename( fname ).split( "-" )[ 1 ] ]
     except KeyError:
-        infomsg( "warning: could not determine condition for", fname )
+        infomsg( "warning: could not determine condition for", fname,
+            os.path.basename( fname ).split( "-" )[ 1 ]
+        )
         condition = ""
     return condition
 
@@ -291,8 +319,16 @@ for results in args:
 infomsg( "INFO: loading logfiles for %d experiments" % len( args ) )
 for results in args:
     params = collateral[ results ]
+    if options.stop_after == "default":
+        params[ "stop after" ] = None
+    else:
+        params[ "stop after" ] = int( options.stop_after )
+    count = 0
     with open( params[ "logfile" ] ) as fh:
-        for entry in LogParser( fh, options.stop_after ).getEntries():
+        parser = LogParser( fh, params[ "stop after" ] )
+        entries = parser.getEntries()
+        for entry in entries:
+            count += 1
             if entry.variant != "original":
                 continue
             params[ "orig" ] = np.array( [ map( float, entry.fitness ) ] )
@@ -302,6 +338,23 @@ for results in args:
                 "ERROR: %s: could not find original fitness" % params["logfile"]
             )
             exit( 1 )
+        if options.stop_after == "default":
+            for line in parser.getDebug():
+                if line.startswith( "Variant Test Case Queries:" ):
+                    params[ "stop after" ] = int( line.split()[ -1 ] )
+                    break
+            else:
+                for entry in entries:
+                    count += 1
+                params[ "stop after" ] = \
+                    int( 2 ** np.floor( np.log2( count ) ) ) + 1
+
+            infomsg( "DEBUG: %s %s %s: stop after = %d" % (
+                params[ "bmark" ],
+                params[ "condition" ],
+                params[ "input" ],
+                params[ "stop after" ]
+            ) )
 
 ########
 # Collect scale factors for Y axis
@@ -341,7 +394,7 @@ for results in args:
         params[ "improvement" ],
         params[ "orig" ],
         params[ "input" ],
-        options.stop_after,
+        params[ "stop after" ],
         True,
         request
     )
@@ -357,7 +410,7 @@ for results in args:
     params[ "heldout" ] = readImprovement(
         params[ "improvement" ],
         params[ "orig" ],
-        stop_after = options.stop_after,
+        stop_after = params[ "stop after" ],
         include_orig = True
     )
 
@@ -410,7 +463,7 @@ for fname in options.single:
             exit( 1 )
         params = inputs[ getInput( configfile ) ]
     params[ "single" ] = readImprovement(
-        fname, params[ "orig" ], params[ "input" ], options.stop_after
+        fname, params[ "orig" ], params[ "input" ], params[ "stop after" ]
     )
 for results in args:
     params = collateral[ results ]
@@ -429,7 +482,7 @@ for results in args:
         if params[ "input" ] != getInput( configfile ):
             continue
         p = readImprovement(
-            improvement, params[ "orig" ], params[ "input" ], options.stop_after
+            improvement, params[ "orig" ], params[ "input" ], params[ "stop after" ]
         )
         if len( p ) > 0:
             improvements.append( ( improvement, p ) )
@@ -516,7 +569,8 @@ if not options.no_acceptable:
             marker          = 'o',
             markersize      = 10,
             markeredgecolor = colors( 0.33 ),
-            markerfacecolor = 'none'
+            markeredgewidth = 2.5,
+            markerfacecolor = colors( 0.33 )
     ) ) )
 # "original" must be last so that we can convert to percents
 styles.append( (
@@ -570,6 +624,10 @@ for ax, results in zip( axes, args ):
         xmin -= 1
     if ymin == ymax:
         ymax += 1
+    if options.xlim is not None:
+        xmin, xmax = map( float, options.xlim.split( "," ) )
+    if options.ylim is not None:
+        ymin, ymax = map( float, options.ylim.split( "," ) )
     xmin, xmax = np.dot( ( xmin, xmax ), m )
     ymin, ymax = np.dot( ( ymin, ymax ), m )
 
