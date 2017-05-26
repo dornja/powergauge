@@ -10,6 +10,7 @@ all: $(root)/../bin/freqdiff
 all: $(root)/../bin/getcpu
 all: $(root)/../bin/hamming
 all: $(root)/../bin/diff-img
+all: $(root)/../bin/hires-time
 
 freqdiff: LDLIBS=-lm
 

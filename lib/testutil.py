@@ -235,18 +235,11 @@ class RaplMetric( BasicMetric ):
 class TimeMetric( BasicMetric ):
     def __init__( self, root ):
         BasicMetric.__init__( self, False )
-
-    def parse( self, fh ):
-        for term in next( fh ).split():
-            if not term.endswith( "elapsed" ):
-                continue
-            term = term[ :-7 ].split( ":" )
-            return [ int( term[ 0 ] ) * 60 + float( term[ 1 ] ) ]
-        return list()
+        self.prefix = os.path.join( root, "bin", "hires-time" )
 
     def getPrefix( self, count, num_jobs ):
         self.getFitnessFile( num_jobs )
-        return [ "/usr/bin/time", "-o", self.fitness_file, "--append", "--" ]
+        return [ self.prefix, self.fitness_file ]
 
 class WuMetric( BasicMetric ):
     def __init__( self, root, options ):
