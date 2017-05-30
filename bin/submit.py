@@ -22,6 +22,10 @@ parser.add_option(
     help = "do not minimize pareto frontier"
 )
 parser.add_option(
+    "--raw-fitness", action = "store_true",
+    help = "store raw fitness values to csv file"
+)
+parser.add_option(
     "--stop-after", metavar = "N", type = int,
     help = "stop the search / minimization after N fitness evaluations"
 )
@@ -53,6 +57,8 @@ if options.inputs is not None:
     print >>script, "--inputs", options.inputs,
 if options.no_simplify:
     print >>script, "--no-simplify",
+if options.raw_fitness:
+    print >>script, "--raw-fitness",
 if options.stop_after is not None:
     print >>script, "--stop-after", options.stop_after,
 if options.use_search is not None:
@@ -65,10 +71,11 @@ print >>script, "EOF"
 # always submit from the home directory...
 
 os.chdir( os.path.expanduser( "~" ) )
-p = Popen(
-    [ "sbatch", "--exclusive", "--job-name", results ] + slurmopts,
-    stdin = PIPE
-)
+#p = Popen(
+#    [ "sbatch", "--exclusive", "--job-name", results ] + slurmopts,
+#    stdin = PIPE
+#)
+p = Popen( [ "/bin/bash" ], stdin = PIPE )
 p.communicate( script.getvalue() )
 p.wait()
 exit( p.returncode )

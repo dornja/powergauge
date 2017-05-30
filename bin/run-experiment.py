@@ -25,6 +25,10 @@ parser.add_option(
     help = "do not minimize pareto frontier"
 )
 parser.add_option(
+    "--raw-fitness", action = "store_true",
+    help = "store raw fitness values to csv file"
+)
+parser.add_option(
     "--stop-after", metavar = "N", type = int,
     help = "stop the search / minimization after N fitness evaluations"
 )
@@ -156,6 +160,8 @@ if not options.no_simplify:
         cmd += [ "--stop-after", str( int( config[ "--max-evals" ] ) + 1 ) ]
     if len( options.inputs ) > 0:
         cmd += [ "--inputs", options.inputs ]
+    if options.raw_fitness:
+        cmd += [ "--raw-fitness" ]
     check_call( cmd )
 
 # log the end time to the logfile

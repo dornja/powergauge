@@ -1,10 +1,12 @@
 #!/usr/bin/python
 
-from contextlib import contextmanager
+from collections import defaultdict
+from contextlib import closing, contextmanager
 import csv
 from glob import glob
 from optparse import OptionParser
 import os
+import shelve
 import shlex
 from subprocess import call, check_call, CalledProcessError
 import sys
@@ -46,6 +48,10 @@ parser.add_option(
 parser.add_option(
     "--low-error", metavar = "p", type = float,
     help = "repeat measurements until (standard error / mean) < (1+p)"
+)
+parser.add_option(
+    "--raw-fitness", action = "store_true",
+    help = "store raw fitness values to csv file"
 )
 parser.add_option(
     "--save-binaries", action = "store_true",
@@ -144,16 +150,22 @@ class TestCmd:
         return self.input_arg
 
 class ImprovementTable:
-    def __init__( self, filename ):
-        self.data = dict()
+    def __init__( self, filename, key = "improvement" ):
+        self.key = key
+        self.data = defaultdict( list )
         self.filename = filename
         if not os.path.exists( filename ):
             return
         with open( filename ) as fh:
-            reader = csv.DictReader( fh )
+            reader = csv.reader( fh )
+            header = next( reader )
+            genome = header.index( "genome" )
+            input  = header.index( "input" )
             for row in reader:
-                key = row[ "genome" ], row[ "input" ]
-                self.data[ key ] = row[ "improvement" ]
+                key = row[ genome ], row[ input ]
+                del row[ max( genome, input ) ]
+                del row[ min( genome, input ) ]
+                self.data[ key ].append( row )
 
     def __enter__( self ):
         return self
@@ -170,14 +182,17 @@ class ImprovementTable:
     def __setitem__( self, key, value ):
         return self.data.__setitem__( key, value )
 
+    def __delitem__( self, key ):
+        return self.data.__delitem__( key )
+
     def save( self ):
         with open( self.filename, 'w' ) as fh:
             writer = csv.writer( fh )
-            writer.writerow( [ "genome", "input", "improvement" ] )
+            writer.writerow( [ "genome", "input", self.key ] )
             for genome, test_input in sorted( self.data ):
-                writer.writerow( map( str, [
-                    genome, test_input, self.data[ ( genome, test_input ) ]
-                ] ) )
+                for row in self.data[ ( genome, test_input ) ]:
+                    row = " ".join( map( str, row ) )
+                    writer.writerow( map( str, [ genome, test_input, row ] ) )
 
 def parse_log( infile, outfile ):
     infomsg( "INFO: parsing", infile )
@@ -347,30 +362,50 @@ def process_genome( best ):
                 )
             )
         genome_key = os.path.basename( this_genome )
-        with ImprovementTable( os.path.join( results, "improvement" ) ) as imprv:
-            for test_input in options.inputs:
-                if not options.force and ( genome_key, test_input ) in imprv:
-                    continue
-                with mkconfig( test_cmd( test_input ) ) as config:
-                    cmd = [
-                        minimize, genprog, config,
-                            "--search", "none",
-                            "--genome-file", this_genome,
-                    ]
-                    if not options.force:
-                        cmd += [ "--cache", cache( test_input ) ]
-                    if options.low_error is not None:
-                        cmd += [ "--low-error", str( options.low_error ) ]
-                    with mktemp() as log:
-                        try:
-                            pipeline( [ cmd, [ "tee", log ] ] )
-                        except CalledProcessError:
-                            if ( genome_key, test_input ) in imprv:
-                                del imprv[ genome_key, test_input ]
-                            continue
-                        imprv[ genome_key, test_input ] = " ".join(
-                            map( str, get_improvement( log ) )
-                        )
+
+        imprvfile = os.path.join( results, "improvement" )
+        if options.raw_fitness:
+            rawfile = os.path.join( results, "raw.csv" )
+        else:
+            rawfile = "/dev/null"
+        with ImprovementTable( imprvfile ) as imprv:
+            with ImprovementTable( rawfile, "fitness" ) as raw:
+                for test_input in options.inputs:
+                    key = genome_key, test_input
+                    done = not options.force and key in imprv
+                    done = done and ( not options.raw_fitness or key in raw )
+                    if done:
+                        continue
+
+                    with mkconfig( test_cmd( test_input ) ) as config:
+                        cachefile = cache( test_input )
+                        if options.force and os.path.exists( cachefile ):
+                            os.remove( cachefile )
+                        with closing( shelve.open( cachefile ) ) as d:
+                            keys = set( d.keys() )
+                        cmd = [
+                            minimize, genprog, config,
+                                "--search", "none",
+                                "--genome-file", this_genome,
+                                "--cache", cache( test_input )
+                            ]
+                        if options.low_error is not None:
+                            cmd += [ "--low-error", str( options.low_error ) ]
+                        with mktemp() as log:
+                            try:
+                                pipeline( [ cmd, [ "tee", log ] ] )
+                            except CalledProcessError:
+                                if ( genome_key, test_input ) in imprv:
+                                    del imprv[ genome_key, test_input ]
+                                continue
+                            imprv[ genome_key, test_input ] = \
+                                [ get_improvement( log ) ]
+                        with closing( shelve.open( cachefile ) ) as d:
+                            keys = list( set( d.keys() ).difference( keys ) )
+                            keys.sort( key = lambda x: len( x ) )
+                            if len( keys ) > 0:
+                                newkey = keys[ -1 ]
+                                raw[ genome_key, test_input ] = d[ newkey ][ 0 ]
 
 if options.all_variants:
     for i, genome in enumerate( genomes ):
