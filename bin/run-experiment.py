@@ -91,10 +91,10 @@ if options.use_search is not None:
     check_call(
         [ "ln", "-f" ] + [ os.path.join(results, a) for a in artifacts ] + [ "." ]
     )
-else:
-    # create the config file
-    with open( "configuration", 'w' ) as fh:
-        print >>fh, config.strip()
+
+# create the config file
+with open( "configuration", 'w' ) as fh:
+    print >>fh, config.strip()
 
 # log start timestamp, the git hash and hostname to a file
 with open( "experiment.log", 'a' ) as logfile:

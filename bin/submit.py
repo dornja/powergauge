@@ -71,11 +71,10 @@ print >>script, "EOF"
 # always submit from the home directory...
 
 os.chdir( os.path.expanduser( "~" ) )
-#p = Popen(
-#    [ "sbatch", "--exclusive", "--job-name", results ] + slurmopts,
-#    stdin = PIPE
-#)
-p = Popen( [ "/bin/bash" ], stdin = PIPE )
+p = Popen(
+    [ "sbatch", "--exclusive", "--job-name", results ] + slurmopts,
+    stdin = PIPE
+)
 p.communicate( script.getvalue() )
 p.wait()
 exit( p.returncode )
