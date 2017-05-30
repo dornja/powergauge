@@ -258,7 +258,7 @@ else:
 with get_cache() as cache:
     deltas, builder = get_builder( deltas )
     infomsg( "found", len( deltas ), "deltas" )
-    if len( deltas ) == 0:
+    if len( deltas ) == 0 and options.search != "none":
         base = [ 1 ]
         optim = [ 1 ]
         runtime = 0
