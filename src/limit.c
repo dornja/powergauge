@@ -32,7 +32,7 @@ set_limit( int resource, rlim_t value )
     if ( limits.rlim_cur > value )
         limits.rlim_cur = value;
 
-    setrlimit( resource, &limits );
+    status = setrlimit( resource, &limits );
     if ( status == -1 ) {
         perror( NULL );
         exit( 127 );
